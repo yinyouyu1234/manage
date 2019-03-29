@@ -1,0 +1,58 @@
+.el-menu-item.is-active {
+  background: #0277bd;
+}
+.el-menu-item ,.el-submenu__title{
+  color: #039be5;
+}
+.el-menu-item.is-active {
+  color: #fff
+}
+.el-input {
+  width: 70%;
+}
+.el-table {
+  /* padding: 20px; */
+}
+.el-select--small {
+  /* width: 200px!important; */
+}
+.el-pagination {
+  display: inline-block;
+}
+.avatar-uploader {
+  
+}
+.avatar-uploader .el-upload {
+  border: 1px dashed #d9d9d9;
+  border-radius: 6px;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+}
+.avatar-uploader .el-upload:hover {
+  border-color: #409eff;
+}
+.avatar-uploader-icon {
+  font-size: 28px;
+  color: #8c939d;
+  width: 80px;
+  height: 80px;
+  line-height: 80px;
+  text-align: center;
+}
+.avatar {
+  width: 80px;
+  height: 80px;
+  display: block;
+}
+.el-date-editor--daterange.el-input__inner{
+  width: 250px!important;
+}
+.el-dialog__body img {
+  width: 100%
+}
+
+.el-table__empty-text{
+  line-height: 300px;
+  min-height: 300px;
+}
