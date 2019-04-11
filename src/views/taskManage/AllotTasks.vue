@@ -52,10 +52,17 @@
         :loading="tableLoading"
         :total="total"
         @getInfo="getInfo"
+        @edit="edit"
+        @disable="disable"
         @changePage="changePage"
       />
     </div>
-    <el-dialog width="500px" title="分配任务" :visible.sync="dialogFormVisible">
+    <el-dialog
+      :close-on-click-modal="false"
+      width="500px"
+      title="分配任务"
+      :visible.sync="dialogFormVisible"
+    >
       <el-form
         :model="ruleForm"
         :rules="rules"
@@ -70,8 +77,7 @@
             v-model="ruleForm.flights_name"
             :fetch-suggestions="querySearch"
             placeholder="请输入内容"
-            :trigger-on-focus="false"
-            @select="handleSelect"
+            @select="handleSelectFlight"
           ></el-autocomplete>
         </el-form-item>
         <el-form-item label="班次时间" prop="task_time">
@@ -85,9 +91,8 @@
             class="inline-input"
             size="mini"
             v-model="ruleForm.user_name"
-            :fetch-suggestions="querySearch"
+            :fetch-suggestions="querySearchUserName"
             placeholder="请输入巡检人员"
-            :trigger-on-focus="false"
             @select="handleSelect"
           ></el-autocomplete>
         </el-form-item>
@@ -95,10 +100,12 @@
           <el-date-picker
             size="mini"
             type="dates"
-            v-model="ruleForm.task_time"
+            v-model="ruleForm.task_date"
             placeholder="选择一个或多个日期"
+            :picker-options="pickerOptions1"
             format="yyyy-MM-dd "
-            value-format="yyyy-MM-dd"
+            value-format="timestamp"
+            :readonly="dateReadOnly"
           ></el-date-picker>
           <br>
           <span class="allot-tasks--time">{{ ruleForm.time}}</span>
@@ -119,6 +126,7 @@ import ViewTitle from "@/components/ViewTitle.vue";
 import Search from "@/components/Search.vue";
 import PcTable from "@/components/Table.vue";
 import ImageList from "@/components/ImageList.vue";
+import { formart } from "@/utils/formateTime";
 export default {
   name: "SetAbnormal",
   components: {
@@ -129,6 +137,8 @@ export default {
   },
   data() {
     return {
+      formStatus: "add",
+      dateReadOnly: false,
       total: 0,
       loading: false,
       tableLoading: false,
@@ -140,18 +150,17 @@ export default {
         patrol_route_id: "",
         patrol_route_name: "",
         user_id: "",
-        user_name: ""
+        user_name: "",
+        task_date: [],
+        addTaskTime: ""
       },
       rules: {
         flights_name: [
           { required: true, message: "请输入活动名称", trigger: "blur" }
         ],
-        time: [{ required: true, message: "请选择日期", trigger: "blur" }]
+        task_date: [{ required: true, message: "请选择日期", trigger: "blur" }]
       },
-      dialogMapVisible: false,
       dialogFormVisible: false,
-      innerVisible: false,
-      formLabelWidth: "120px",
       dataTime: "",
       condition: {
         pageIndex: "1",
@@ -174,7 +183,7 @@ export default {
           label: "巡检人员"
         },
         {
-          prop: "flights_type",
+          prop: "flights_type_name",
           label: "巡检类型"
         },
         {
@@ -187,18 +196,18 @@ export default {
         },
         {
           prop: "start_time",
-          label: "开始时间"
+          label: "巡检开始时间"
         },
         {
           prop: "end_time",
-          label: "结束时间"
+          label: "巡检结束时间"
         },
         {
-          prop: "status",
+          prop: "task_status_name",
           label: "状态"
         },
         {
-          prop: "exception",
+          prop: "exception_name",
           label: "有无异常"
         }
       ],
@@ -215,34 +224,70 @@ export default {
           value: "1",
           label: "常规巡检"
         }
-      ]
+      ],
+      restaurants: [],
+      restaurantsUserName: [],
+      pickerOptions1: {
+        disabledDate(time) {
+          return time.getTime() <= Date.now() - 1000 * 60 * 60 * 24;
+        }
+      }
     };
   },
   watch: {
     dialogFormVisible() {
       if (!this.dialogFormVisible) {
         this.$refs.ruleForm.resetFields();
-
-        Object.keys(this.ruleForm).forEach(key => {
-          this.ruleForm[key] = "";
-        });
+        this.dateReadOnly = false;
+        this.ruleForm = {
+          id: "",
+          flights_id: "",
+          flights_name: "",
+          task_time: "",
+          patrol_route_id: "",
+          patrol_route_name: "",
+          user_id: "",
+          user_name: "",
+          task_date: [],
+          addTaskTime: ""
+        };
       }
     }
   },
   created() {
     this.getList();
+    this.loadAll();
+    this.loadAllUserName();
   },
   mounted() {},
   methods: {
-    changePage() {
+    changePage(page) {
       this.condition.pageIndex = page;
       this.getList();
     },
     submit(formName) {
       this.$refs[formName].validate(valid => {
         if (valid) {
-          alert("submit!");
-          this.dialogFormVisible = false;
+          const obj = {};
+          let url = "";
+          if (this.formStatus === "edit") {
+            url = "/flightstask/edit";
+            obj.flights_task_id = this.ruleForm.flights_id;
+            obj.user_id = this.ruleForm.user_id;
+          } else if (this.formStatus === "add") {
+            url = "/flightstask/add";
+            obj.flights_id = this.ruleForm.flights_id;
+            obj.user_id = this.ruleForm.user_id;
+            obj.patrol_route_id = this.ruleForm.patrol_route_id;
+            obj.task_time = this.ruleForm.addTaskTime;
+            obj.task_date = this.ruleForm.task_date;
+          }
+          this.$axios.post(`${this.api}${url}`, obj).then(res => {
+            if (res.data.retCode == 10000) {
+              this.dialogFormVisible = false;
+              this.getList();
+            }
+          });
         } else {
           console.log("error submit!!");
           return false;
@@ -253,24 +298,6 @@ export default {
       this.loading = true;
       this.getList(true);
     },
-    // mapInit() {
-    //   // 百度地图API功能
-    //   var map = new BMap.Map("container");
-    //   map.centerAndZoom(new BMap.Point(118.454, 32.955), 7);
-    //   map.enableScrollWheelZoom();
-    //   var beijingPosition = new BMap.Point(116.432045, 39.910683),
-    //     hangzhouPosition = new BMap.Point(120.129721, 30.314429),
-    //     taiwanPosition = new BMap.Point(121.491121, 25.127053);
-    //   var points = [beijingPosition, hangzhouPosition, taiwanPosition];
-
-    //   var curve = new BMapLib.CurveLine(points, {
-    //     strokeColor: "#0277bd",
-    //     strokeWeihght: 3,
-    //     strokeOpacity: 0
-    //   });
-    //   map.addOverlay(curve);
-    //   curve.enableEditing();
-    // },
     getList(filter = false) {
       this.tableLoading = true;
       this.$axios
@@ -278,13 +305,48 @@ export default {
         .then(res => {
           this.tableLoading = false;
           this.loading = false;
-          this.total = res.data.data.total;
-          filter &&
-            this.$message({
-              message: "搜索成功",
-              type: "success"
+          if (res.data.retCode == 10000) {
+            this.total = res.data.data.total;
+            const data = res.data.data.items;
+            data.forEach((item, i) => {
+              item.index = i + 1 + (this.condition.pageIndex - 1) * 10;
+              item.flights_type_name =
+                item.flights_type == 1 ? "常规巡检" : "随机巡检";
+              item.exception_name = item.exception ? "有异常" : "无异常";
+              item.task_status_name =
+                item.task_status == 0
+                  ? "未开始"
+                  : item.task_status == 1
+                  ? "进行中"
+                  : "已完成";
+              item.buttonInfo = [
+                {
+                  name: "getInfo",
+                  disabled: item.task_status == 0 ? true : false,
+                  type: "primary",
+                  label: "查看"
+                },
+                {
+                  name: "edit",
+                  disabled: item.task_status == 0 ? false : true,
+                  type: "primary",
+                  label: "编辑"
+                },
+                {
+                  name: item.status == 0 ? "disable" : "disable",
+                  disabled: item.task_status == 0 ? false : true,
+                  type: item.status == 0 ? "primary" : "danger",
+                  label: item.status == 0 ? "启用" : "禁用"
+                }
+              ];
             });
-          console.log(res);
+            this.tableData = data;
+            filter &&
+              this.$message({
+                message: "搜索成功",
+                type: "success"
+              });
+          }
         })
         .catch(err => {
           this.loading = false;
@@ -295,19 +357,104 @@ export default {
       this.condition.end_time = this.dataTime[1].getTime();
     },
     querySearch(queryString, cb) {
-      cb();
+      const restaurants = this.restaurants;
+      let results = queryString
+        ? restaurants.filter(this.createFilter(queryString))
+        : restaurants;
+      cb(results);
+    },
+    querySearchUserName(queryString, cb) {
+      const restaurants = this.restaurantsUserName;
+      let results = queryString
+        ? restaurants.filter(this.createFilter(queryString))
+        : restaurants;
+      cb(results);
+    },
+    createFilter(queryString) {
+      return restaurant => {
+        return (
+          restaurant.value.toLowerCase().indexOf(queryString.toLowerCase()) ===
+          0
+        );
+      };
+    },
+    loadAllUserName() {
+      this.$axios.get(`${this.api}/user/getInspectorList`).then(res => {
+        if (res.data.retCode == 10000) {
+          this.restaurantsUserName = res.data.data.map(item => ({
+            id: item.value,
+            value: item.label
+          }));
+        }
+      });
+    },
+    loadAll() {
+      this.$axios.get(`${this.api}/flights/getAllSelectList`).then(res => {
+        this.restaurants = res.data.data.map(item => ({
+          id: item.value,
+          value: item.label
+        }));
+      });
     },
     handleSelect(item) {
-      console.log(item);
+      this.ruleForm.user_id = item.id;
+    },
+    handleSelectFlight(item) {
+      this.ruleForm.flights_id = item.id;
+      this.$axios.get(`${this.api}/flights/get?id=${item.id}`).then(res => {
+        if (res.data.retCode == 10000) {
+          const { data } = res.data;
+          if (this.formStatus == "edit") {
+            alert(1);
+            this.ruleForm.task_time = formart(data.flights_time, "hh:mm");
+            this.ruleForm.task_date = [new Date(data.flights_time)];
+          } else if (this.formStatus == "add") {
+            this.ruleForm.addTaskTime = new Date(data.flights_time).getTime();
+            this.ruleForm.patrol_route_name = data.patrol_route_name;
+            this.ruleForm.task_time = formart(
+              new Date(data.flights_time),
+              "hh:mm"
+            );
+          }
+          this.ruleForm.patrol_route_id = data.patrol_route_id;
+        }
+      });
+    },
+    edit(row) {
+      this.formStatus = "edit";
+      this.$axios.get(`${this.api}/flightstask/get?id=${row.id}`).then(res => {
+        const { data } = res.data;
+        this.ruleForm = data;
+        this.ruleForm.task_date = [new Date(data.task_time)];
+        this.ruleForm.task_time = formart(data.task_time, "hh:mm");
+      });
+      this.dialogFormVisible = true;
+      this.dateReadOnly = true;
+    },
+    disable(row) {
+      this.$axios
+        .get(
+          `${this.api}/flightstask/changeState?id=${row.id}&user_id=${
+            this.$store.state.app.user_id
+          }`
+        )
+        .then(res => {
+          if (res.data.retCode == 10000) {
+            this.getList();
+          }
+        });
     },
     allot() {
+      this.formStatus = "add";
       this.dialogFormVisible = true;
     },
     getInfo(row) {
-      this.$router.push("/CheckLine");
-    },
-    bigImg() {
-      this.innerVisible = true;
+      this.$router.push({
+        path: "/CheckLine",
+        query: {
+          id: row.id
+        }
+      });
     }
   }
 };

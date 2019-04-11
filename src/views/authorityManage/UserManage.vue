@@ -44,7 +44,12 @@
         @changePage="changePage"
       />
     </div>
-    <el-dialog width="600px" title="添加用户" :visible.sync="dialogFormVisible">
+    <el-dialog
+      :close-on-click-modal="false"
+      width="600px"
+      title="添加用户"
+      :visible.sync="dialogFormVisible"
+    >
       <el-form
         :model="ruleForm"
         :rules="rules"
@@ -59,7 +64,9 @@
           <el-input size="mini" placeholder="请输入用户名" v-model="ruleForm.user_name"></el-input>
         </el-form-item>
         <el-form-item label="密码" prop="password">
-          <el-input size="mini" placeholder="请输入密码" v-model="ruleForm.password"></el-input>
+          <el-input size="mini" :type="inputType" placeholder="请输入密码" v-model="ruleForm.password">
+            <i slot="prefix" @click="changeInputType" class="el-input__icon el-icon-view"></i>
+          </el-input>
         </el-form-item>
         <el-form-item label="手机" prop="phone_number">
           <el-input size="mini" placeholder="请输入手机号码" v-model="ruleForm.phone_number"></el-input>
@@ -103,11 +110,10 @@ export default {
   },
   data() {
     return {
+      inputType: "password",
       total: 0,
       loading: false,
       dialogFormVisible: false,
-      formLabelWidth: "120px",
-      dataTime: "",
       tableLoading: false,
       checkBoxList: [],
       condition: {
@@ -127,7 +133,7 @@ export default {
         roles: [],
         user_code: "",
         user_name: "",
-        user_id: 1,
+        user_id: this.$store.state.app.user_id,
         password_change: false,
         oldPassword: ""
       },
@@ -179,12 +185,7 @@ export default {
           label: "岗位"
         }
       ],
-      options: [
-        {
-          value: "",
-          label: "全部"
-        }
-      ]
+      options: []
     };
   },
   watch: {
@@ -200,12 +201,11 @@ export default {
           roles: [],
           user_code: "",
           user_name: "",
-          user_id: 1,
+          user_id: this.$store.state.app.user_id,
           password_change: false,
           oldPassword: ""
         };
       } else {
-        this.getAppRoles();
       }
     }
   },
@@ -215,6 +215,9 @@ export default {
   },
   mounted() {},
   methods: {
+    changeInputType() {
+      this.inputType = this.inputType == "password" ? "text" : "password";
+    },
     changePage(page) {
       this.condition.pageIndex = page;
       this.getUserList();
@@ -223,7 +226,9 @@ export default {
       this.$axios
         .get(`${this.api}/user/getAppRoles`)
         .then(res => {
-          this.ruleForm.roles = res.data.data;
+          if (res.data.retCode == 10000) {
+            this.ruleForm.roles = res.data.data;
+          }
         })
         .catch(err => {});
     },
@@ -231,8 +236,14 @@ export default {
       this.$axios
         .get(`${this.api}/user/getUserStatus`)
         .then(res => {
-          const { data } = res.data;
-          Object.assign(this.options, data);
+          if (res.data.retCode == 10000) {
+            const { data } = res.data;
+            data.unshift({
+              value: "",
+              label: "全部"
+            });
+            this.options = data;
+          }
         })
         .catch(err => {});
     },
@@ -242,11 +253,25 @@ export default {
           if (this.ruleForm.oldPassword != this.ruleForm.password) {
             this.ruleForm.password_change = true;
           }
+          const arr = [];
+          this.ruleForm.roles.forEach(item => {
+            item.role.forEach(ele => {
+              if (ele.check) {
+                arr.push(ele.id);
+              }
+            });
+          });
+          const obj = {
+            ...this.ruleForm,
+            roles: arr
+          };
           this.$axios
-            .post(`${this.api}/user/put`, this.ruleForm)
+            .post(`${this.api}/user/put`, obj)
             .then(res => {
-              this.getUserList();
-              this.dialogFormVisible = false;
+              if (res.data.retCode == 10000) {
+                this.getUserList();
+                this.dialogFormVisible = false;
+              }
             })
             .catch(err => {});
         } else {
@@ -266,59 +291,73 @@ export default {
     enable(row) {
       this.tableLoading = true;
       this.$axios
-        .get(`${this.api}/user/get?id=${row.id}&user_id=1`)
+        .get(`${this.api}/user/changeState?id=${row.id}`)
         .then(res => {
           this.tableLoading = false;
-          row.buttonInfo.splice(1, 1, {
-            label: "禁用",
-            name: "disable",
-            type: "danger"
-          });
-          this.$message({
-            message: "操作成功",
-            type: "success"
-          });
+          if (res.data.retCode == 10000) {
+            row.buttonInfo.splice(1, 1, {
+              label: "禁用",
+              name: "disable",
+              type: "danger"
+            });
+            this.$message({
+              message: "操作成功",
+              type: "success"
+            });
+          }
         })
         .catch(err => {});
     },
     disable(row) {
       this.tableLoading = true;
       this.$axios
-        .get(`${this.api}/user/get?id=${row.id}&user_id=1`)
+        .get(`${this.api}/user/changeState?id=${row.id}`)
         .then(res => {
           this.tableLoading = false;
-          row.buttonInfo.splice(1, 1, {
-            label: "启用",
-            name: "enable",
-            type: "primary"
-          });
-          this.$message({
-            message: "操作成功",
-            type: "success"
-          });
+          if (res.data.retCode == 10000) {
+            row.buttonInfo.splice(1, 1, {
+              label: "启用",
+              name: "enable",
+              type: "primary"
+            });
+            this.$message({
+              message: "操作成功",
+              type: "success"
+            });
+          }
         })
         .catch(err => {});
     },
     edit(row) {
       this.dialogFormVisible = true;
-      this.$axios
-        .get(`${this.api}/user/get?id=${row.id}`)
-        .then(res => {
-          const { data } = res.data;
-          // data.roles.forEach(item => {
-          //   item.role.forEach(ele => {
-          //     ele.check && this.checkBoxList.push(ele.id);
-          //   });
-          // });
-          this.ruleForm = {
-            ...this.ruleForm,
-            ...data,
-            id: row.id
-          };
-          this.ruleForm.oldPassword = this.ruleForm.password;
-          console.log(this.ruleForm);
-        })
-        .catch(err => {});
+      new Promise((resolve, reject) => {
+        this.getAppRoles();
+        resolve();
+      }).then(() => {
+        this.$axios
+          .get(`${this.api}/user/get?id=${row.id}`)
+          .then(res => {
+            if (res.data.retCode == 10000) {
+              const { data } = res.data;
+              const arr = [...data.roles];
+              delete data.roles;
+              this.ruleForm = {
+                ...this.ruleForm,
+                ...data,
+                id: row.id
+              };
+              this.ruleForm.roles.forEach(item => {
+                item.role.forEach(ele => {
+                  if (arr.indexOf(ele.id) != -1) {
+                    ele.check = true;
+                  }
+                });
+              });
+              this.ruleForm.oldPassword = this.ruleForm.password;
+            }
+          })
+          .catch(err => {});
+      });
     },
     filter() {
       this.loading = true;
@@ -330,49 +369,52 @@ export default {
         .post(`${this.api}/user/getList`, this.condition)
         .then(res => {
           this.tableLoading = false;
-          const { data } = res.data;
-          this.total = data.total;
-          data.items.map((item, index) => {
-            item.index = index + 1;
-            if (item.statusCode == 1) {
-              item.buttonInfo = [
-                {
-                  name: "edit",
-                  type: "primary",
-                  label: "编辑"
-                },
-                {
-                  name: "disable",
-                  type: "danger",
-                  label: "禁用"
-                }
-              ];
-            } else {
-              item.buttonInfo = [
-                {
-                  name: "edit",
-                  type: "primary",
-                  label: "编辑"
-                },
-                {
-                  name: "enable",
-                  type: "primary",
-                  label: "启用"
-                }
-              ];
-            }
-          });
-          this.loading = false;
-          filter &&
-            this.$message({
-              message: "搜索成功",
-              type: "success"
+          if (res.data.retCode == 10000) {
+            const { data } = res.data;
+            this.total = data.total;
+            data.items.map((item, index) => {
+              item.index = index + 1 + (this.condition.pageIndex - 1) * 10;
+              if (item.status == 1) {
+                item.buttonInfo = [
+                  {
+                    name: "edit",
+                    type: "primary",
+                    label: "编辑"
+                  },
+                  {
+                    name: "disable",
+                    type: "danger",
+                    label: "禁用"
+                  }
+                ];
+              } else {
+                item.buttonInfo = [
+                  {
+                    name: "edit",
+                    type: "primary",
+                    label: "编辑"
+                  },
+                  {
+                    name: "enable",
+                    type: "primary",
+                    label: "启用"
+                  }
+                ];
+              }
             });
-          this.tableData = data.items;
+            this.loading = false;
+            filter &&
+              this.$message({
+                message: "搜索成功",
+                type: "success"
+              });
+            this.tableData = data.items;
+          }
         })
         .catch(err => {});
     },
     addUser() {
+      this.getAppRoles();
       this.dialogFormVisible = true;
     }
   }
@@ -384,6 +426,9 @@ export default {
     height: 30px;
     cursor: pointer;
   }
+}
+.el-icon-view {
+  cursor: pointer;
 }
 </style>
 

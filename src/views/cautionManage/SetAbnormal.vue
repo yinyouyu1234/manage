@@ -79,6 +79,7 @@ import Search from "@/components/Search.vue";
 import PcTable from "@/components/Table.vue";
 import ImageList from "@/components/ImageList.vue";
 import VideoDialog from "@/components/VideoDialog.vue";
+import { form, columnData, options } from "./setAbnormalStatic.js";
 export default {
   name: "SetAbnormal",
   components: {
@@ -107,115 +108,10 @@ export default {
         state: ""
       },
       imgList: [],
-      form: [
-        {
-          label: "KKS",
-          prop: "kks",
-          value: ""
-        },
-        {
-          label: "设备类型",
-          prop: "equipment_type_name",
-          value: ""
-        },
-        {
-          label: "设备名称",
-          prop: "equipment_name",
-          value: ""
-        },
-        {
-          label: "巡检部位",
-          prop: "equipment_part_name",
-          value: ""
-        },
-        {
-          label: "巡检项",
-          prop: "equipment_part_item_name",
-          value: ""
-        },
-        {
-          label: "标准",
-          prop: "stand",
-          value: ""
-        },
-        {
-          label: "状态",
-          prop: "status",
-          value: ""
-        },
-        {
-          label: "巡检值",
-          prop: "value",
-          value: ""
-        },
-        {
-          label: "描述",
-          prop: "description",
-          value: ""
-        }
-      ],
+      form,
       tableData: [],
-      columnData: [
-        {
-          prop: "index",
-          label: "编号",
-          width: 70
-        },
-        {
-          prop: "kks",
-          label: "KKS"
-        },
-        {
-          prop: "equipment_type_name",
-          label: "设备类型"
-        },
-        {
-          prop: "equipment_name",
-          label: "设备名称"
-        },
-        {
-          prop: "equipment_part_name",
-          label: "巡检部位"
-        },
-        {
-          prop: "equipment_part_item_name",
-          label: "巡检项"
-        },
-        {
-          prop: "user_name",
-          label: "巡检人员"
-        },
-        {
-          prop: "start_time",
-          label: "巡检时间"
-        },
-        {
-          prop: "handle_state",
-          label: "消缺状态"
-        },
-        {
-          prop: "stand",
-          label: "标准"
-        },
-        {
-          prop: "value",
-          label: "结果"
-        }
-      ],
-      options: [
-        {
-          value: "",
-          label: "全部"
-        },
-        {
-          value: "1",
-          label: "未消缺"
-        },
-        {
-          value: "0",
-          label: "已消缺"
-        }
-      ]
+      columnData: columnData,
+      options: options
     };
   },
   created() {
@@ -223,39 +119,40 @@ export default {
   },
   mounted() {},
   methods: {
-    changePage() {
+    changePage(page) {
       this.condition.pageIndex = page;
       this.getList();
     },
     changeData() {
       this.condition.start_time = this.dataTime[0].getTime();
       this.condition.end_time = this.dataTime[1].getTime();
-      console.log(this.condition);
     },
     getList(filter = false) {
       this.$axios
         .post(`${this.api}/patrolRecord/getList`, this.condition)
         .then(res => {
           this.loading = false;
-          const data = res.data.data.items;
-          this.total = res.data.data.total;
-          data.forEach((item, index) => {
-            item.index = index + 1;
-            item.handle_state = item.handle_state ? "已消缺" : "未消缺";
-            item.buttonInfo = [
-              {
-                name: "getInfo",
-                type: "primary",
-                label: "查看"
-              }
-            ];
-          });
-          this.tableData = data;
-          filter &&
-            this.$message({
-              message: "查询成功",
-              type: "success"
+          if (res.data.retCode == 10000) {
+            const data = res.data.data.items;
+            this.total = res.data.data.total;
+            data.forEach((item, index) => {
+              item.index = index + 1 + (this.condition.pageIndex - 1) * 10;
+              item.handle_state = item.handle_state ? "已消缺" : "未消缺";
+              item.buttonInfo = [
+                {
+                  name: "getInfo",
+                  type: "primary",
+                  label: "查看"
+                }
+              ];
             });
+            this.tableData = data;
+            filter &&
+              this.$message({
+                message: "查询成功",
+                type: "success"
+              });
+          }
         })
         .catch(err => {
           this.loading = false;
@@ -270,11 +167,13 @@ export default {
       this.$axios
         .get(`${this.api}/patrolRecord/getExceptionDetail?id=${row.id}`)
         .then(res => {
-          const { data } = res.data;
-          this.form.forEach(item => {
-            item.value = data[item.prop];
-          });
-          this.imgList = data.img;
+          if (res.data.retCode == 10000) {
+            const { data } = res.data;
+            this.form.forEach(item => {
+              item.value = data[item.prop];
+            });
+            this.imgList = data.img;
+          }
         });
     },
     bigImg() {

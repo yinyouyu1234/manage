@@ -36,7 +36,12 @@
         :total="total"
       />
     </div>
-    <el-dialog width="500px" title="添加角色" :visible.sync="dialogFormVisible">
+    <el-dialog
+      :close-on-click-modal="false"
+      width="500px"
+      title="添加角色"
+      :visible.sync="dialogFormVisible"
+    >
       <el-form
         :model="ruleForm"
         :rules="rules"
@@ -65,10 +70,13 @@
       </el-form>
       <div style="padding-left:80px;width:200px">
         <el-tree
+          ref="tree"
           :data="treeData"
           :props="defaultProps"
           show-checkbox
-          @check-change="handleCheckChange"
+          node-key="id"
+          :default-expanded-keys="expandedKeys"
+          :default-checked-keys="checkedKeys"
         ></el-tree>
       </div>
       <div slot="footer" class="dialog-footer">
@@ -97,9 +105,10 @@ export default {
         children: "children",
         label: "label"
       },
+      expandedKeys: [],
+      checkedKeys: [],
       treeData: [],
       dialogFormVisible: false,
-      formLabelWidth: "120px",
       condition: {
         pageIndex: "1",
         pageSize: "10",
@@ -108,12 +117,16 @@ export default {
       ruleForm: {
         id: "",
         application_code: "",
+        menu_id: [],
+        user_id: this.$store.state.app.user_id,
         role_name: ""
       },
       rules: {
-        name: [
-          { required: true, message: "请输入活动名称", trigger: "blur" },
-          { min: 3, max: 5, message: "长度在 3 到 5 个字符", trigger: "blur" }
+        application_code: [
+          { required: true, message: "请选择活动名称", trigger: "blur" }
+        ],
+        role_name: [
+          { required: true, message: "请输入角色名称", trigger: "blur" }
         ]
       },
       tableData: [],
@@ -128,8 +141,8 @@ export default {
           label: "应用程序"
         },
         {
-          prop: "menu_name",
-          label: "菜单"
+          prop: "role_name",
+          label: "角色名称"
         },
         {
           prop: "status",
@@ -143,6 +156,7 @@ export default {
     dialogFormVisible() {
       if (!this.dialogFormVisible) {
         this.$refs.ruleForm.resetFields();
+        this.treeData = [];
       } else {
         this.getTreeByApplication();
       }
@@ -150,7 +164,6 @@ export default {
   },
   created() {
     this.getApplication();
-    this.getMenuList();
   },
   mounted() {},
   methods: {
@@ -159,6 +172,8 @@ export default {
       this.getMenuList();
     },
     filter() {
+      this.ruleForm.application_code = this.condition.application_code;
+
       this.getMenuList();
     },
     changeTree() {
@@ -167,45 +182,61 @@ export default {
     enable(row) {
       this.loading = true;
       this.$axios
-        .get(`${this.api}/role/changeState?id=${row.id}&user_id=1`)
+        .get(
+          `${this.api}/role/changeState?id=${row.id}&user_id=${
+            this.$store.state.app.user_id
+          }`
+        )
         .then(res => {
           this.loading = false;
-          row.buttonInfo.splice(1, 1, {
-            label: "禁用",
-            name: "disable",
-            type: "danger"
-          });
-          this.$message({
-            message: "操作成功",
-            type: "success"
-          });
+          if (res.data.retCode == 10000) {
+            this.getMenuList();
+            this.$message({
+              message: "操作成功",
+              type: "success"
+            });
+          }
         })
         .catch(err => {});
     },
     disable(row) {
       this.loading = true;
       this.$axios
-        .get(`${this.api}/role/changeState?id=${row.id}&user_id=1`)
+        .get(
+          `${this.api}/role/changeState?id=${row.id}&user_id=${
+            this.$store.state.app.user_id
+          }`
+        )
         .then(res => {
           this.loading = false;
-          console.log(res);
-          row.buttonInfo.splice(1, 1, {
-            label: "启用",
-            name: "enable",
-            type: "primary"
-          });
-          this.$message({
-            message: "操作成功",
-            type: "success"
-          });
+          if (res.data.retCode == 10000) {
+            this.getMenuList();
+            this.$message({
+              message: "操作成功",
+              type: "success"
+            });
+          }
         })
         .catch(err => {});
     },
     submit(formName) {
       this.$refs[formName].validate(valid => {
         if (valid) {
-          alert("submit!");
-          this.dialogFormVisible = false;
+          const checkListIds = this.$refs.tree.getCheckedNodes().map(item => {
+            return item.id;
+          });
+          this.ruleForm.menu_id = checkListIds;
+          this.$axios.post(`${this.api}/role/put`, this.ruleForm).then(res => {
+            this.dialogFormVisible = false;
+            if (res.data.retCode == 10000) {
+              this.ruleForm = {
+                ...this.ruleForm,
+                id: "",
+                menu_id: [],
+                user_id: this.$store.state.app.user_id
+              };
+            }
+          });
         } else {
           console.log("error submit!!");
           return false;
@@ -216,69 +247,68 @@ export default {
       this.$axios
         .get(`${this.api}/application/getAll`)
         .then(res => {
-          console.log(res);
-          let { data } = res.data;
-          data = data.map(item => {
-            return {
-              ...item,
-              value: item.id,
-              label: item.application_name
-            };
-          });
-          this.options = data;
-          this.options.unshift({
-            value: "",
-            label: "全部"
-          });
+          if (res.data.retCode == 10000) {
+            let { data } = res.data;
+            data = data.map(item => {
+              return {
+                value: item.application_code,
+                label: item.application_name
+              };
+            });
+            this.options = data;
+            this.condition.application_code = data[0].value;
+            this.ruleForm.application_code = data[0].value;
+            this.getMenuList();
+          }
         })
         .catch(err => {});
     },
     getMenuList() {
       this.loading = true;
       this.$axios
-        .post(`${this.api}/menu/getList`, this.condition)
+        .post(`${this.api}/role/getList`, this.condition)
         .then(res => {
           this.loading = false;
-
-          const { data } = res.data;
-          this.total = data.total;
-          data.items.map((item, index) => {
-            item.index = index + 1;
-            item.statusCode = item.status;
-            item.status = item.status == 1 ? "启用" : "禁用";
-            if (item.statusCode == 1) {
-              item.buttonInfo = [
-                {
-                  name: "edit",
-                  type: "primary",
-                  label: "编辑"
-                },
-                {
-                  name: "disable",
-                  type: "danger",
-                  label: "禁用"
-                }
-              ];
-            } else {
-              item.buttonInfo = [
-                {
-                  name: "edit",
-                  type: "primary",
-                  label: "编辑"
-                },
-                {
-                  name: "enable",
-                  type: "primary",
-                  label: "启用"
-                }
-              ];
-            }
-          });
-          this.tableData = data.items;
+          if (res.data.retCode == 10000) {
+            const { data } = res.data;
+            this.total = data.total;
+            data.items.map((item, index) => {
+              item.index = index + 1 + (this.condition.pageIndex - 1) * 10;
+              item.statusCode = item.status;
+              item.status = item.status == 1 ? "启用" : "禁用";
+              if (item.statusCode == 1) {
+                item.buttonInfo = [
+                  {
+                    name: "edit",
+                    type: "primary",
+                    label: "编辑"
+                  },
+                  {
+                    name: "disable",
+                    type: "danger",
+                    label: "禁用"
+                  }
+                ];
+              } else {
+                item.buttonInfo = [
+                  {
+                    name: "edit",
+                    type: "primary",
+                    label: "编辑"
+                  },
+                  {
+                    name: "enable",
+                    type: "primary",
+                    label: "启用"
+                  }
+                ];
+              }
+            });
+            this.tableData = data.items;
+          }
         })
         .catch(err => {});
     },
-
     getTreeByApplication() {
       this.$axios
         .get(
@@ -287,48 +317,46 @@ export default {
           }`
         )
         .then(res => {
-          console.log(res);
-          const { data } = res.data,
-            treeData = [];
-          data.forEach(item => {
-            if (item.childs) {
-              item.childs.forEach(ele => {
-                ele.label = ele.name;
+          if (res.data.retCode == 10000) {
+            const { data } = res.data;
+            const arr = [];
+            data.forEach(item => {
+              const child = [];
+              if (item.childs) {
+                item.childs.forEach(ele => {
+                  child.push({
+                    label: ele.name,
+                    id: ele.current.id
+                  });
+                });
+              }
+              arr.push({
+                label: item.name,
+                children: child,
+                id: item.current.id
               });
-            }
-
-            item.label = item.name;
-            item.children = item.childs;
-          });
-
-          this.treeData = data;
+            });
+            this.treeData = arr;
+          }
         })
         .catch(err => {});
-    },
-    handleCheckChange(data, checked, indeterminate) {
-      console.log(data, checked, indeterminate);
     },
     addUser() {
       this.dialogFormVisible = true;
     },
     edit(row) {
       this.dialogFormVisible = true;
-    },
-    bigImg() {
-      this.innerVisible = true;
-    },
-    fileClick() {
-      const link = document.createElement("a");
-      const body = document.querySelector("body");
-      const blob = new Blob([content]);
-      link.href = window.URL.createObjectURL(blob);
-      link.download = filename;
-      // fix Firefox
-      link.style.display = "none";
-      body.appendChild(link);
-      link.click();
-      body.removeChild(link);
-      window.URL.revokeObjectURL(link.href);
+      this.$axios.get(`${this.api}/role/get?id=${row.id}`).then(res => {
+        if (res.data.retCode == 10000) {
+          const { data } = res.data;
+          this.ruleForm = {
+            ...this.ruleForm,
+            ...data
+          };
+          this.expandedKeys = data.menu_id;
+          this.checkedKeys = data.menu_id;
+        }
+      });
     }
   }
 };

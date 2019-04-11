@@ -17,7 +17,12 @@
         @changePage="changePage"
       />
     </div>
-    <el-dialog width="600px" title="文件列表" :visible.sync="dialogFormVisible">
+    <el-dialog
+      :close-on-click-modal="false"
+      width="600px"
+      title="文件列表"
+      :visible.sync="dialogFormVisible"
+    >
       <el-form
         :model="ruleForm"
         :rules="rules"
@@ -57,7 +62,7 @@ export default {
         id: "",
         application_name: "",
         application_code: "",
-        user_id: "1"
+        user_id: this.$store.state.app.user_id
       },
       rules: {
         application_name: [
@@ -68,9 +73,6 @@ export default {
         ]
       },
       dialogFormVisible: false,
-      innerVisible: false,
-      formLabelWidth: "120px",
-      dataTime: "",
       condition: {
         pageIndex: 1,
         pageSize: 10
@@ -129,40 +131,41 @@ export default {
       this.$axios
         .post(`${this.api}/application/getList`, this.condition)
         .then(res => {
-          console.log(res);
-          const data = res.data.data.items;
-          data.forEach((item, index) => {
-            item.index = index + 1;
-            if (item.status == 1) {
-              item.buttonInfo = [
-                {
-                  name: "edit",
-                  type: "primary",
-                  label: "编辑"
-                },
-                {
-                  name: "disable",
-                  type: "danger",
-                  label: "禁用"
-                }
-              ];
-            } else {
-              item.buttonInfo = [
-                {
-                  name: "edit",
-                  type: "primary",
-                  label: "编辑"
-                },
-                {
-                  name: "enable",
-                  type: "primary",
-                  label: "启用"
-                }
-              ];
-            }
-          });
-          this.total = res.data.data.total;
-          this.tableData = data;
+          if (res.data.retCode == 10000) {
+            const data = res.data.data.items;
+            data.forEach((item, index) => {
+              item.index = index + 1 + (this.condition.pageIndex - 1) * 10;
+              if (item.status == 1) {
+                item.buttonInfo = [
+                  {
+                    name: "edit",
+                    type: "primary",
+                    label: "编辑"
+                  },
+                  {
+                    name: "disable",
+                    type: "danger",
+                    label: "禁用"
+                  }
+                ];
+              } else {
+                item.buttonInfo = [
+                  {
+                    name: "edit",
+                    type: "primary",
+                    label: "编辑"
+                  },
+                  {
+                    name: "enable",
+                    type: "primary",
+                    label: "启用"
+                  }
+                ];
+              }
+            });
+            this.total = res.data.data.total;
+            this.tableData = data;
+          }
         });
     },
     edit(row) {
@@ -176,36 +179,48 @@ export default {
     enable(row) {
       this.loading = true;
       this.$axios
-        .get(`${this.api}/application/changestate?id=${row.id}&user_id=1`)
+        .get(
+          `${this.api}/application/changestate?id=${row.id}&user_id=${
+            this.$store.state.app.user_id
+          }`
+        )
         .then(res => {
           this.loading = false;
-          row.buttonInfo.splice(1, 1, {
-            label: "禁用",
-            name: "disable",
-            type: "danger"
-          });
-          this.$message({
-            message: "操作成功",
-            type: "success"
-          });
+          if (res.data.retCode == 10000) {
+            row.buttonInfo.splice(1, 1, {
+              label: "禁用",
+              name: "disable",
+              type: "danger"
+            });
+            this.$message({
+              message: "操作成功",
+              type: "success"
+            });
+          }
         })
         .catch(err => {});
     },
     disable(row) {
       this.loading = true;
       this.$axios
-        .get(`${this.api}/application/changestate?id=${row.id}&user_id=1`)
+        .get(
+          `${this.api}/application/changestate?id=${row.id}&user_id=${
+            this.$store.state.app.user_id
+          }`
+        )
         .then(res => {
           this.loading = false;
-          row.buttonInfo.splice(1, 1, {
-            label: "启用",
-            name: "enable",
-            type: "primary"
-          });
-          this.$message({
-            message: "操作成功",
-            type: "success"
-          });
+          if (res.data.retCode == 10000) {
+            row.buttonInfo.splice(1, 1, {
+              label: "启用",
+              name: "enable",
+              type: "primary"
+            });
+            this.$message({
+              message: "操作成功",
+              type: "success"
+            });
+          }
         })
         .catch(err => {});
     },
@@ -218,13 +233,15 @@ export default {
           this.$axios
             .post(`${this.api}/application/put`, this.ruleForm)
             .then(res => {
-              this.dialogFormVisible = false;
-              this.getList();
-              console.log(res);
-              this.$message({
-                message: "添加成功",
-                type: "success"
-              });
+              if (res.data.retCode == 10000) {
+                this.dialogFormVisible = false;
+                this.getList();
+                console.log(res);
+                this.$message({
+                  message: "添加成功",
+                  type: "success"
+                });
+              }
             })
             .catch(err => {
               this.$message({

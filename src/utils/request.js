@@ -1,5 +1,6 @@
 import axios from 'axios'
 import { Message } from 'element-ui'
+import { getCookie } from '@/utils/cookie'
 
 const service = axios.create({
   baseURL: process.env.BASE_API, // api 的 base_url
@@ -7,8 +8,7 @@ const service = axios.create({
 })
 service.interceptors.request.use(
   config => {
-    config.headers.token = '123456789'
-    console.log(config)
+    config.headers.token = getCookie('user_info') ? JSON.parse(getCookie('user_info')).token : ''
     return config
   },
   error => {
@@ -19,7 +19,7 @@ service.interceptors.request.use(
 
 service.interceptors.response.use(
   response => {
-    console.log(response)
+    // eslint-disable-next-line eqeqeq
     if (response.data.retCode === 10000) {
       return response
     } else {
@@ -28,11 +28,10 @@ service.interceptors.response.use(
         type: 'error',
         duration: 5 * 1000
       })
+      return response
     }
-    // return response
   },
   error => {
-    console.log('err' + error)
     Message({
       message: error.message,
       type: 'error',

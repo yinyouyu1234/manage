@@ -20,15 +20,15 @@
               <el-menu-item-group>
                 <el-menu-item
                   v-for="(ele, index) in item.children"
-                  :index="ele.id"
+                  :index="ele.id.toString()"
                   :key="index"
                   @click="handleNav(ele)"
                 >{{ele.title}}</el-menu-item>
               </el-menu-item-group>
             </el-submenu>
-            <el-menu-item :key="index" :index="index" v-else>
-              <i class="el-icon-menu"></i>
-              <span slot="title">导航二</span>
+            <el-menu-item @click="handleNav(item)" :key="index" :index="index" v-else>
+              <span class="iconfont" :class="item.icon"></span>
+              <span slot="title">{{item.title}}</span>
             </el-menu-item>
           </template>
         </el-menu>
@@ -47,7 +47,12 @@ export default {
     };
   },
   created() {
-    this.navList = JSON.parse(window.localStorage.getItem("navList"));
+    this.navList = JSON.parse(window.localStorage.getItem("menu"));
+    // if (this.navList[0].children) {
+    //   this.navActive = this.navList[0].children[0].id;
+    // } else {
+    //   this.navActive = this.navList[0].id;
+    // }
     if (sessionStorage.getItem("navOpen")) {
       this.open = JSON.parse(sessionStorage.getItem("navOpen"));
     }
@@ -57,16 +62,15 @@ export default {
   },
   methods: {
     handleOpen(key, keyPath) {
-      console.log(key, keyPath);
       sessionStorage.setItem("navOpen", JSON.stringify(keyPath));
     },
-    handleClose(key, keyPath) {
-      console.log(key, keyPath);
-    },
+    handleClose(key, keyPath) {},
     handleNav(item) {
       console.log(item);
       window.sessionStorage.setItem("navActive", item.id);
-      this.$router.push(item.path);
+      this.$router.push({
+        path: item.path
+      });
     }
   }
 };
@@ -74,7 +78,6 @@ export default {
 <style lang="less">
 .tac {
   border-right: solid 1px #e6e6e6;
-  overflow: auto;
   height: calc(100vh - 64px);
   .el-menu {
     border: none;

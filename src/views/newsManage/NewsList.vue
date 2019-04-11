@@ -36,18 +36,29 @@
         @changePage="changePage"
       />
     </div>
-    <el-dialog title="基本信息" width="750px" :visible.sync="dialogFormVisible">
+    <el-dialog
+      :close-on-click-modal="false"
+      title="基本信息"
+      width="750px"
+      :visible.sync="dialogFormVisible"
+    >
       <el-form :model="ruleForm" :rules="rules" ref="ruleForm">
         <el-form-item prop="title" label="新闻标题" :label-width="formLabelWidth">
           <el-input size="small" v-model="ruleForm.title" autocomplete="off"></el-input>
         </el-form-item>
         <el-form-item label="新闻主图" :label-width="formLabelWidth">
           <el-upload
-            action="https://jsonplaceholder.typicode.com/posts/"
+            v-if="dialogFormVisible"
+            :action="url"
+            :headers="head"
             list-type="picture-card"
             :on-preview="handlePictureCardPreview"
             :on-remove="handleRemove"
             :on-success="handleAvatarSuccess"
+            :before-upload="beforeAvatarUpload"
+            :file-list="fileList"
+            :limit="1"
+            :on-exceed="handleExceed"
           >
             <i class="el-icon-plus"></i>
           </el-upload>
@@ -70,6 +81,7 @@
 import ViewTitle from "@/components/ViewTitle.vue";
 import Search from "@/components/Search.vue";
 import PcTable from "@/components/Table.vue";
+import { isImage } from "@/utils/isImage.js";
 import E from "wangeditor";
 export default {
   name: "NewsList",
@@ -79,19 +91,20 @@ export default {
     PcTable
   },
   data() {
+    const token = this.token;
     return {
+      fileList: [],
+      imgList: [],
+      head: { token },
+      url: `${this.upload}/upload/uploadimg`,
       total: 0,
       loading: false,
       tableLoading: false,
       dialogVisible: false,
       dialogImageUrl: "",
-
-      imageUrl: "",
       dialogFormVisible: false,
-      innerVisible: false,
       formLabelWidth: "120px",
       dataTime: "",
-      editorHasInit: false,
       rules: {
         title: [
           { required: true, message: "请输入新闻标题", trigger: "blur" }
@@ -135,23 +148,15 @@ export default {
   },
   watch: {
     dialogFormVisible() {
-      if (this.dialogFormVisible && !this.editorHasInit) {
-        this.editorHasInit = true;
-        setTimeout(() => {
-          this.editorInit();
-        }, 300);
-      }
       if (!this.dialogFormVisible) {
+        this.fileList = [];
+        this.imgList = [];
         this.ruleForm = {
           title: "",
           content: "",
           id: "",
           img: []
         };
-      } else {
-        setTimeout(() => {
-          this.editorInit();
-        }, 300);
       }
     }
   },
@@ -163,18 +168,34 @@ export default {
     submit(formName) {
       this.$refs[formName].validate(valid => {
         if (valid) {
-          this.$axios.post(`${this.api}/news/put`, this.ruleForm).then(res => {
-            this.dialogFormVisible = false;
-            this.getNewsList();
+          if (this.ruleForm.img.length === 0) {
             this.$message({
-              type: "success",
-              message: "添加成功!"
+              type: "warning",
+              message: "请上传新闻主图!"
             });
+            return;
+          }
+          this.ruleForm.img = this.imgList;
+          this.$axios.post(`${this.api}/news/put`, this.ruleForm).then(res => {
+            if (res.data.retCode == 10000) {
+              this.dialogFormVisible = false;
+              this.getNewsList();
+              this.$message({
+                type: "success",
+                message: "添加成功!"
+              });
+            }
           });
         } else {
           console.log("error submit!!");
           return false;
         }
+      });
+    },
+    handleExceed(files, fileList) {
+      this.$message({
+        message: "只可以上传一张照片",
+        type: "warning"
       });
     },
     changePage(page) {
@@ -190,34 +211,35 @@ export default {
       this.$axios
         .post(`${this.api}/news/getList`, this.condition)
         .then(res => {
-          const data = res.data.data.items;
-          this.total = res.data.data.total;
-          data.forEach((item, index) => {
-            item.index = index + 1;
-            item.statusCode = item.status;
-            item.status = item.status == 1 ? "启用" : "禁用";
-            item.buttonInfo = [
-              {
-                name: "edit",
-                type: "primary",
-                label: "编辑"
-              },
-              {
-                name: "delete",
-                type: "danger",
-                label: "删除"
-              }
-            ];
-          });
-          this.tableData = data;
           this.loading = false;
           this.tableLoading = false;
-          filter &&
-            this.$message({
-              message: "搜索成功",
-              type: "success"
+          if (res.data.retCode == 10000) {
+            const data = res.data.data.items;
+            this.total = res.data.data.total;
+            data.forEach((item, index) => {
+              item.index = index + 1 + (this.condition.pageIndex - 1) * 10;
+              item.statusCode = item.status;
+              item.status = item.status == 1 ? "启用" : "禁用";
+              item.buttonInfo = [
+                {
+                  name: "edit",
+                  type: "primary",
+                  label: "编辑"
+                },
+                {
+                  name: "delete",
+                  type: "danger",
+                  label: "删除"
+                }
+              ];
             });
-          console.log(res);
+            this.tableData = data;
+            filter &&
+              this.$message({
+                message: "搜索成功",
+                type: "success"
+              });
+          }
         })
         .catch(err => {
           this.loading = false;
@@ -226,66 +248,76 @@ export default {
     dataChange() {
       this.condition.start_time = this.dataTime[0].getTime();
       this.condition.end_time = this.dataTime[1].getTime();
-      console.log(this.condition);
     },
-    editorInit() {
-      var editor = new E("#editor");
+    editorInit(info = "") {
+      const editor = new E("#editor");
       editor.customConfig.onchange = html => {
         this.formArticle = html;
-        console.log(html);
+        this.ruleForm.content = html;
       };
-      editor.customConfig.uploadImgServer = "<%=path%>/Img/upload"; //上传URL
+      editor.customConfig.uploadImgServer = this.url; //上传URL
       editor.customConfig.uploadImgMaxSize = 3 * 1024 * 1024;
       editor.customConfig.uploadImgMaxLength = 5;
-      editor.customConfig.uploadFileName = "myFileName";
+      editor.customConfig.uploadFileName = "file";
+      editor.customConfig.uploadImgHeaders = {
+        token: this.token
+      };
       editor.customConfig.uploadImgHooks = {
         customInsert: function(insertImg, result, editor) {
-          // 图片上传并返回结果，自定义插入图片的事件（而不是编辑器自动插入图片！！！）
-          // insertImg 是插入图片的函数，editor 是编辑器对象，result 是服务器端返回的结果
-
-          // 举例：假如上传图片成功后，服务器端返回的是 {url:'....'} 这种格式，即可这样插入图片：
           var url = result.data;
           insertImg(url);
-
-          // result 必须是一个 JSON 格式字符串！！！否则报错
         }
       };
       editor.create();
-      editor.txt.html(this.ruleForm.content);
+      editor.txt.html(info);
     },
     handlePictureCardPreview(file) {
       this.dialogImageUrl = file.url;
       this.dialogVisible = true;
     },
     handleRemove(file, fileList) {
-      console.log(file, fileList);
+      this.imgList.forEach((item, index) => {
+        if (item.name === file.name) {
+          this.imgList.splice(index, 1);
+        }
+      });
     },
     handleAvatarSuccess(res, file) {
-      console.log(res, file);
+      this.imgList.push({
+        name: file.name,
+        url: res.data
+      });
     },
     beforeAvatarUpload(file) {
-      // const isJPG = file.type === "image/jpeg";
-      // const isLt2M = file.size / 1024 / 1024 < 2;
-      // if (!isJPG) {
-      //   this.$message.error("上传头像图片只能是 JPG 格式!");
-      // }
-      // if (!isLt2M) {
-      //   this.$message.error("上传头像图片大小不能超过 2MB!");
-      // }
-      // return isJPG && isLt2M;
-    },
-    handleAvatarSuccess(res, file) {
-      this.imageUrl = URL.createObjectURL(file.raw);
+      const imageFlag = isImage(file);
+      if (!imageFlag) {
+        this.$message.error("只能上传图片");
+      }
+      return imageFlag;
     },
     addClick() {
       this.dialogFormVisible = true;
+      setTimeout(() => {
+        this.editorInit();
+      }, 300);
     },
     edit(row) {
       this.dialogFormVisible = true;
       this.$axios.get(`${this.api}/news/get?id=${row.id}`).then(res => {
-        console.log(res);
-        const { data } = res.data;
-        this.ruleForm = data;
+        if (res.data.retCode == 10000) {
+          const { data } = res.data;
+          this.fileList = [...data.img];
+          this.ruleForm = data;
+          this.imgList = data.img.map(item => {
+            return {
+              name: item.name,
+              url: item.url
+            };
+          });
+          setTimeout(() => {
+            this.editorInit(data.content);
+          }, 300);
+        }
       });
     },
     deleteItem(row) {
@@ -296,30 +328,22 @@ export default {
       })
         .then(() => {
           this.$axios
-            .get(`${this.api}/news/changeState?id=${row.id}&user_id=1`)
+            .get(
+              `${this.api}/news/changeState?id=${row.id}&user_id=${
+                this.$store.state.app.user_id
+              }`
+            )
             .then(res => {
-              console.log(res);
-              this.getNewsList();
-              this.$message({
-                type: "success",
-                message: "删除成功!"
-              });
+              if (res.data.retCode == 10000) {
+                this.getNewsList();
+                this.$message({
+                  type: "success",
+                  message: "删除成功!"
+                });
+              }
             });
         })
         .catch(() => {});
-    },
-    fileClick() {
-      const link = document.createElement("a");
-      const body = document.querySelector("body");
-      const blob = new Blob([content]);
-      link.href = window.URL.createObjectURL(blob);
-      link.download = filename;
-      // fix Firefox
-      link.style.display = "none";
-      body.appendChild(link);
-      link.click();
-      body.removeChild(link);
-      window.URL.revokeObjectURL(link.href);
     }
   }
 };

@@ -52,21 +52,7 @@ export default {
       total: 0,
       loading: false,
       tableLoading: false,
-      imageUrl: "",
-      innerVisible: false,
-      dialogFormVisible: false,
-      innerVisibleState: "",
-      formLabelWidth: "120px",
-      dataTime: "",
-      tableData: [
-        {
-          id: 1,
-          equipment_type_code: "编号",
-          equipment_type_name: "设备类型名称",
-          manufacturer: "生产厂家",
-          remark: "备注"
-        }
-      ],
+      tableData: [],
       condition: {
         pageIndex: "",
         pageSize: "",
@@ -126,7 +112,7 @@ export default {
   },
   mounted() {},
   methods: {
-    changePage() {
+    changePage(page) {
       this.condition.pageIndex = page;
       this.getData();
     },
@@ -135,49 +121,50 @@ export default {
       this.$axios
         .post(`${this.api}/equipmentType/getList`, this.condition)
         .then(res => {
-          console.log(res);
-          this.total = res.data.data.total;
-          const data = res.data.data.items;
           this.loading = false;
           this.tableLoading = false;
-          data.forEach((item, index) => {
-            item.index = index;
-            item.statusCode = item.status;
-            item.status = item.status == 1 ? "启用" : "禁用";
-            if (item.statusCode == 1) {
-              item.buttonInfo = [
-                {
-                  name: "edit",
-                  type: "primary",
-                  label: "编辑"
-                },
-                {
-                  name: "disable",
-                  type: "danger",
-                  label: "禁用"
-                }
-              ];
-            } else {
-              item.buttonInfo = [
-                {
-                  name: "edit",
-                  type: "primary",
-                  label: "编辑"
-                },
-                {
-                  name: "enable",
-                  type: "primary",
-                  label: "启用"
-                }
-              ];
-            }
-          });
-          this.tableData = data;
-          filter &&
-            this.$message({
-              message: "搜索成功",
-              type: "success"
+          if (res.data.retCode == 10000) {
+            this.total = res.data.data.total;
+            const data = res.data.data.items;
+            data.forEach((item, index) => {
+              item.index = index;
+              item.statusCode = item.status;
+              item.status = item.status == 1 ? "启用" : "禁用";
+              if (item.statusCode == 1) {
+                item.buttonInfo = [
+                  {
+                    name: "edit",
+                    type: "primary",
+                    label: "编辑"
+                  },
+                  {
+                    name: "disable",
+                    type: "danger",
+                    label: "禁用"
+                  }
+                ];
+              } else {
+                item.buttonInfo = [
+                  {
+                    name: "edit",
+                    type: "primary",
+                    label: "编辑"
+                  },
+                  {
+                    name: "enable",
+                    type: "primary",
+                    label: "启用"
+                  }
+                ];
+              }
             });
+            this.tableData = data;
+            filter &&
+              this.$message({
+                message: "搜索成功",
+                type: "success"
+              });
+          }
         })
         .catch(err => {
           this.loading = false;
@@ -185,34 +172,44 @@ export default {
     },
     enable(row) {
       this.$axios
-        .get(`${this.api}/equipment/changeState?id=${row.id}&user_id=1`)
+        .get(
+          `${this.api}/equipmentType/changeState?id=${row.id}&user_id=${
+            this.$store.state.app.user_id
+          }`
+        )
         .then(res => {
-          this.$message({
-            message: "操作成功",
-            type: "success"
-          });
-          row.buttonInfo.splice(1, 1, {
-            label: "禁用",
-            name: "disable",
-            type: "danger"
-          });
-          console.log(res);
+          if (res.data.retCode == 10000) {
+            this.$message({
+              message: "操作成功",
+              type: "success"
+            });
+            row.buttonInfo.splice(1, 1, {
+              label: "禁用",
+              name: "disable",
+              type: "danger"
+            });
+          }
         });
     },
     disable(row) {
       this.$axios
-        .get(`${this.api}/equipment/changeState?id=${row.id}&user_id=1`)
+        .get(
+          `${this.api}/equipmentType/changeState?id=${row.id}&user_id=${
+            this.$store.state.app.user_id
+          }`
+        )
         .then(res => {
-          row.buttonInfo.splice(1, 1, {
-            label: "启用",
-            name: "enable",
-            type: "primary"
-          });
-          this.$message({
-            message: "操作成功",
-            type: "success"
-          });
-          console.log(res);
+          if (res.data.retCode == 10000) {
+            row.buttonInfo.splice(1, 1, {
+              label: "启用",
+              name: "enable",
+              type: "primary"
+            });
+            this.$message({
+              message: "操作成功",
+              type: "success"
+            });
+          }
         });
     },
     addClick() {
@@ -224,7 +221,8 @@ export default {
       this.$router.push({
         path: "/EditEquipmentType",
         query: {
-          type: "edit"
+          type: "edit",
+          id: row.id
         }
       });
     },

@@ -30,7 +30,12 @@
         @changePage="changePage"
       />
     </div>
-    <el-dialog title="基本信息" width="600px" :visible.sync="dialogFormVisible">
+    <el-dialog
+      :close-on-click-modal="false"
+      title="基本信息"
+      width="600px"
+      :visible.sync="dialogFormVisible"
+    >
       <el-form :model="ruleForm" :rules="rules" ref="ruleForm">
         <el-form-item prop="patrol_point_name" label="巡检点名称" :label-width="formLabelWidth">
           <el-input size="mini" v-model="ruleForm.patrol_point_name" autocomplete="off"></el-input>
@@ -44,14 +49,14 @@
         <hr style="margin-bottom:20px;">
         <div class="dialog-input--box">
           <div class="label">KKS</div>
-          <el-input size="mini" v-model="formAddTable.kks" @change="changekks" autocomplete="off"></el-input>
+          <el-input size="mini" v-model="formAddTable.kks" autocomplete="off"></el-input>
         </div>
         <div class="dialog-input--box">
           <div class="labels">序号</div>
           <el-input
             size="mini"
             type="number"
-            v-model="formAddTable.id"
+            v-model="formAddTable.index"
             @change="changeid"
             autocomplete="off"
           ></el-input>
@@ -88,7 +93,7 @@ export default {
   computed: {
     dis() {
       return (
-        this.formAddTable.id.length > 0 && this.formAddTable.kks.length > 0
+        this.formAddTable.index.length > 0 && this.formAddTable.kks.length > 0
       );
     }
   },
@@ -97,12 +102,8 @@ export default {
       total: 0,
       loading: false,
       tableLoading: false,
-      state2: "",
-      imageUrl: "",
       dialogFormVisible: false,
-      innerVisible: false,
       formLabelWidth: "120px",
-      dataTime: "",
       rules: {
         patrol_point_name: [
           { required: true, message: "请输入巡检点名称", trigger: "blur" }
@@ -125,10 +126,11 @@ export default {
         patrol_point_name: "",
         longitude: "",
         latitude: "",
-        equipment_id: [],
-        user_id: 1
+        equipments: [],
+        user_id: this.$store.state.app.user_id
       },
       formAddTable: {
+        index: "",
         kks: "",
         id: "",
         equipment_name: ""
@@ -144,10 +146,6 @@ export default {
         {
           prop: "patrol_point_name",
           label: "名称"
-        },
-        {
-          prop: "remark",
-          label: "备注"
         }
       ],
       columnDataDialog: [
@@ -187,6 +185,12 @@ export default {
           longitude: "",
           latitude: ""
         };
+        this.formAddTable = {
+          kks: "",
+          id: "",
+          equipment_name: "",
+          index: ""
+        };
       } else {
         // this.getLineAll();
       }
@@ -194,60 +198,30 @@ export default {
   },
   mounted() {},
   methods: {
-    changekks() {
-      this.formAddTable.kks.trim().length > 0 &&
-        this.$axios
-          .get(
-            `${this.api}/equipment/getByKKSForPatrolPoint?kks=${
-              this.formAddTable.kks
-            }`
-          )
-          .then(res => {
-            const { data } = res.data;
-            this.formAddTable.id = data.id.toString();
-            this.formAddTable.kks = data.kks;
-            this.formAddTable.equipment_name = data.equipment_name;
-            this.$message({
-              message: "搜索成功",
-              type: "success"
-            });
-          });
-    },
-    changeid() {
-      this.formAddTable.id.trim().length > 0 &&
-        this.$axios
-          .get(
-            `${this.api}/equipment/getByIDForPatrolPoint?id=${
-              this.formAddTable.id
-            }`
-          )
-          .then(res => {
-            const { data } = res.data;
-            this.formAddTable.id = data.id.toString();
-            this.formAddTable.kks = data.kks;
-            this.formAddTable.equipment_name = data.equipment_name;
-            this.$message({
-              message: "搜索成功",
-              type: "success"
-            });
-          });
-    },
-    changePage() {
+    changekks() {},
+    changeid() {},
+    changePage(page) {
       this.condition.pageIndex = page;
       this.getData();
     },
     submit(formName) {
       this.$refs[formName].validate(valid => {
         if (valid) {
+          this.ruleForm.equipments = this.tableDataDialog.map(item => ({
+            equipment_id: item.id,
+            sort: item.index
+          }));
           this.$axios
             .post(`${this.api}/patrolPoint/put`, this.ruleForm)
             .then(res => {
-              this.$message({
-                message: "添加成功",
-                type: "success"
-              });
-              this.getData();
-              this.dialogFormVisible = false;
+              if (res.data.retCode == 10000) {
+                this.$message({
+                  message: "添加成功",
+                  type: "success"
+                });
+                this.getData();
+                this.dialogFormVisible = false;
+              }
             });
         } else {
           console.log("error submit!!");
@@ -256,65 +230,94 @@ export default {
       });
     },
     addTableData() {
-      this.formAddTable.index = this.tableDataDialog.length + 1;
-      this.ruleForm.equipment_id.push(this.formAddTable.id);
-      this.tableDataDialog.push({ ...this.formAddTable });
-      this.formAddTable = {
-        kks: "",
-        id: "",
-        equipment_name: ""
-      };
+      this.formAddTable.kks.trim().length > 0 &&
+        this.$axios
+          .get(
+            `${
+              this.api
+            }/equipment/getByKKSForPatrolPoint?kks=${encodeURIComponent(
+              this.formAddTable.kks.toString()
+            )}`
+          )
+          .then(res => {
+            if (res.data.retCode == 10000) {
+              const { data } = res.data;
+              if (data) {
+                this.formAddTable.id = data.id.toString();
+                this.formAddTable.kks = data.kks;
+                this.formAddTable.equipment_name = data.equipment_name;
+                this.tableDataDialog.push({ ...this.formAddTable });
+                this.tableDataDialog.sort((a, b) => {
+                  return a.index - b.index;
+                });
+                this.$message({
+                  message: "添加成功",
+                  type: "success"
+                });
+                this.formAddTable = {
+                  kks: "",
+                  id: "",
+                  equipment_name: "",
+                  index: ""
+                };
+              } else {
+                this.$message({
+                  message: res.data.retMsg,
+                  type: "warning"
+                });
+              }
+            }
+          });
     },
     getData(filter = false) {
       this.tableLoading = false;
-      console.log(this.condition);
       this.$axios
         .post(`${this.api}/patrolPoint/getList`, this.condition)
         .then(res => {
-          const data = res.data.data.items;
-          this.total = res.data.data.total;
           this.loading = false;
           this.tableLoading = false;
-
-          data.forEach((item, index) => {
-            item.index = index + 1;
-            item.statusCode = item.status;
-            item.status = item.status == 1 ? "启用" : "禁用";
-            if (item.statusCode == 1) {
-              item.buttonInfo = [
-                {
-                  name: "edit",
-                  type: "primary",
-                  label: "编辑"
-                },
-                {
-                  name: "disable",
-                  type: "danger",
-                  label: "禁用"
-                }
-              ];
-            } else {
-              item.buttonInfo = [
-                {
-                  name: "edit",
-                  type: "primary",
-                  label: "编辑"
-                },
-                {
-                  name: "enable",
-                  type: "primary",
-                  label: "启用"
-                }
-              ];
-            }
-          });
-          this.tableData = data;
-          filter &&
-            this.$message({
-              message: "搜索成功",
-              type: "success"
+          if (res.data.retCode == 10000) {
+            const data = res.data.data.items;
+            this.total = res.data.data.total;
+            data.forEach((item, index) => {
+              item.index = index + 1 + (this.condition.pageIndex - 1) * 10;
+              item.statusCode = item.status;
+              item.status = item.status == 1 ? "启用" : "禁用";
+              if (item.statusCode == 1) {
+                item.buttonInfo = [
+                  {
+                    name: "edit",
+                    type: "primary",
+                    label: "编辑"
+                  },
+                  {
+                    name: "disable",
+                    type: "danger",
+                    label: "禁用"
+                  }
+                ];
+              } else {
+                item.buttonInfo = [
+                  {
+                    name: "edit",
+                    type: "primary",
+                    label: "编辑"
+                  },
+                  {
+                    name: "enable",
+                    type: "primary",
+                    label: "启用"
+                  }
+                ];
+              }
             });
-          console.log(res);
+            this.tableData = data;
+            filter &&
+              this.$message({
+                message: "搜索成功",
+                type: "success"
+              });
+          }
         })
         .catch(err => {
           this.tableLoading = false;
@@ -323,64 +326,49 @@ export default {
     },
     enable(row) {
       this.$axios
-        .get(`${this.api}/patrolPoint/changeState?id=${row.id}&user_id=1`)
+        .get(
+          `${this.api}/patrolPoint/changeState?id=${row.id}&user_id=${
+            this.$store.state.app.user_id
+          }`
+        )
         .then(res => {
-          this.$message({
-            message: "操作成功",
-            type: "success"
-          });
-          row.buttonInfo.splice(1, 1, {
-            label: "禁用",
-            name: "disable",
-            type: "danger"
-          });
-          console.log(res);
+          if (res.data.retCode == 10000) {
+            this.$message({
+              message: "操作成功",
+              type: "success"
+            });
+            row.buttonInfo.splice(1, 1, {
+              label: "禁用",
+              name: "disable",
+              type: "danger"
+            });
+          }
         });
     },
     disable(row) {
       this.$axios
-        .get(`${this.api}/patrolPoint/changeState?id=${row.id}&user_id=1`)
+        .get(
+          `${this.api}/patrolPoint/changeState?id=${row.id}&user_id=${
+            this.$store.state.app.user_id
+          }`
+        )
         .then(res => {
-          row.buttonInfo.splice(1, 1, {
-            label: "启用",
-            name: "enable",
-            type: "primary"
-          });
-          this.$message({
-            message: "操作成功",
-            type: "success"
-          });
-          console.log(res);
+          if (res.data.retCode == 10000) {
+            row.buttonInfo.splice(1, 1, {
+              label: "启用",
+              name: "enable",
+              type: "primary"
+            });
+            this.$message({
+              message: "操作成功",
+              type: "success"
+            });
+          }
         });
-    },
-    beforeAvatarUpload(file) {
-      // const isJPG = file.type === "image/jpeg";
-      // const isLt2M = file.size / 1024 / 1024 < 2;
-      // if (!isJPG) {
-      //   this.$message.error("上传头像图片只能是 JPG 格式!");
-      // }
-      // if (!isLt2M) {
-      //   this.$message.error("上传头像图片大小不能超过 2MB!");
-      // }
-      // return isJPG && isLt2M;
-    },
-    handleAvatarSuccess(res, file) {
-      this.imageUrl = URL.createObjectURL(file.raw);
-    },
-    querySearch(queryString, cb) {
-      var restaurants = this.restaurants;
-      var results = queryString
-        ? restaurants.filter(this.createFilter(queryString))
-        : restaurants;
-      // 调用 callback 返回建议列表的数据
-      cb(results);
     },
     filter() {
       this.loading = true;
       this.getData(true);
-    },
-    handleSelect(item) {
-      console.log(item);
     },
     addClick() {
       this.dialogFormVisible = true;
@@ -388,29 +376,15 @@ export default {
     edit(row) {
       this.dialogFormVisible = true;
       this.$axios.get(`${this.api}/patrolPoint/get?id=${row.id}`).then(res => {
-        const { data } = res.data;
-        Object.assign(this.ruleForm, data);
-        data.equipment.forEach((item, index) => {
-          item.index = index + 1;
-        });
-        this.tableDataDialog = data.equipment;
+        if (res.data.retCode == 10000) {
+          const { data } = res.data;
+          Object.assign(this.ruleForm, data);
+          data.equipment.forEach(item => {
+            item.index = item.sort;
+          });
+          this.tableDataDialog = data.equipment;
+        }
       });
-    },
-    bigImg() {
-      this.innerVisible = true;
-    },
-    fileClick() {
-      const link = document.createElement("a");
-      const body = document.querySelector("body");
-      const blob = new Blob([content]);
-      link.href = window.URL.createObjectURL(blob);
-      link.download = filename;
-      // fix Firefox
-      link.style.display = "none";
-      body.appendChild(link);
-      link.click();
-      body.removeChild(link);
-      window.URL.revokeObjectURL(link.href);
     },
     deleteItem(row) {
       this.$confirm("确认删除此条信息吗?", "提示", {
@@ -419,9 +393,10 @@ export default {
         type: "warning"
       })
         .then(() => {
-          this.tableDataDialog.splice(row.index - 1, 1);
           this.tableDataDialog.forEach((item, index) => {
-            item.index = index + 1;
+            if (row.index == item.index) {
+              this.tableDataDialog.splice(index, 1);
+            }
           });
         })
         .catch(() => {});

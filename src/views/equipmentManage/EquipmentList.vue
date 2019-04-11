@@ -40,7 +40,12 @@
         @changePage="changePage"
       />
     </div>
-    <el-dialog title="基本信息" width="600px" :visible.sync="dialogFormVisible">
+    <el-dialog
+      :close-on-click-modal="false"
+      title="基本信息"
+      width="600px"
+      :visible.sync="dialogFormVisible"
+    >
       <el-form :model="ruleForm" :rules="rules" ref="ruleForm">
         <el-form-item prop="equipment_type_id" label="设备类型" :label-width="formLabelWidth">
           <el-select size="mini" v-model="ruleForm.equipment_type_id" placeholder="请选择">
@@ -59,7 +64,6 @@
             v-model="ruleForm.parent_kks"
             :fetch-suggestions="querySearch"
             placeholder="请输入KKS码"
-            :trigger-on-focus="false"
             @select="handleSelect"
           ></el-autocomplete>
         </el-form-item>
@@ -75,13 +79,29 @@
           <el-input size="mini" placeholder="请输入名称，默认同步KKS码" v-model="ruleForm.equipment_name"></el-input>
         </el-form-item>
         <el-form-item prop="patrol_point_id" label="巡检点" :label-width="formLabelWidth">
-          <el-input size="mini" placeholder="请输入巡检码" v-model="ruleForm.patrol_point_id"></el-input>
+          <el-autocomplete
+            class="inline-input"
+            size="mini"
+            v-model="ruleForm.patrol_point_id"
+            :fetch-suggestions="querySearchPoint"
+            placeholder="请输入巡检码"
+            @select="handleSelectPoint"
+          ></el-autocomplete>
         </el-form-item>
         <el-form-item prop="longitude" label="经度" :label-width="formLabelWidth">
           <el-input size="mini" v-model="ruleForm.longitude" placeholder="请输入经度"></el-input>
         </el-form-item>
         <el-form-item prop="latitude" label="纬度" :label-width="formLabelWidth">
           <el-input size="mini" v-model="ruleForm.latitude" placeholder="请输入纬度"></el-input>
+        </el-form-item>
+        <el-form-item prop="latitude" label="主动巡检" :label-width="formLabelWidth">
+          <input type="checkbox" v-model="ruleForm.initiative">
+          <el-input
+            size="mini"
+            v-if="ruleForm.initiative"
+            v-model="ruleForm.sensor_id"
+            placeholder="传感器ID"
+          ></el-input>
         </el-form-item>
         <el-form-item prop="status" label="状态" :label-width="formLabelWidth">
           <el-select size="mini" v-model="ruleForm.status" placeholder="请选择">
@@ -99,6 +119,7 @@
       </el-form>
       <div slot="footer" class="dialog-footer">
         <el-button @click="dialogFormVisible = false">取 消</el-button>
+        <el-button type="primary" v-if="isEdit" @click="copy()">复 制</el-button>
         <el-button type="primary" @click="submit('ruleForm')">确 定</el-button>
       </div>
     </el-dialog>
@@ -108,6 +129,14 @@
 import ViewTitle from "@/components/ViewTitle.vue";
 import Search from "@/components/Search.vue";
 import PcTable from "@/components/Table.vue";
+import {
+  optionsStatus,
+  rules,
+  condition,
+  ruleForm,
+  columnData,
+  options
+} from "./equipmentListStatic.js";
 export default {
   name: "EquipmentList",
   components: {
@@ -120,110 +149,21 @@ export default {
       total: 0,
       loading: false,
       tableLoading: false,
-      state2: "",
       restaurants: [],
       tableData: [],
-      imageUrl: "",
       dialogFormVisible: false,
-      innerVisible: false,
       formLabelWidth: "120px",
-      dataTime: "",
-      optionsStatus: [
-        {
-          label: "启用",
-          value: 1
-        },
-        {
-          label: "停用",
-          value: 0
-        }
-      ],
-      rules: {
-        equipment_type_id: [
-          { required: true, message: "请输入选择设备类型", trigger: "blur" }
-        ],
-        parent_kks: [
-          { required: true, message: "请输入父KKS码", trigger: "blur" }
-        ],
-        kks: [{ required: true, message: "请输入KKS码", trigger: "blur" }],
-        equipment_name: [
-          { required: true, message: "请输入名称", trigger: "blur" }
-        ],
-        patrol_point_id: [
-          { required: true, message: "请输入巡检点", trigger: "blur" }
-        ],
-        longitude: [
-          { required: true, message: "请输入经度", trigger: "blur" }
-          // { min: 3, max: 5, message: "长度在 3 到 5 个字符", trigger: "blur" }
-        ],
-        latitude: [{ required: true, message: "请输入纬度", trigger: "blur" }],
-        status: [{ required: true, message: "请选择状态", trigger: "blur" }]
-      },
-      condition: {
-        pageIndex: 1,
-        pageSize: 10,
-        kks: "",
-        equipment_name: "",
-        status: ""
-      },
-      ruleForm: {
-        id: 0,
-        equipment_type_id: "",
-        parent_kks: "",
-        kks: "",
-        equipment_name: "",
-        patrol_point_id: "",
-        longitude: "",
-        latitude: "",
-        status: "",
-        remark: ""
-      },
-      columnData: [
-        {
-          prop: "index",
-          width: 70,
-          label: "编号"
-        },
-        {
-          prop: "kks",
-          label: "KKS"
-        },
-        {
-          prop: "equipment_name",
-          label: "名称"
-        },
-        {
-          prop: "equipment_type_name",
-          label: "设备类型"
-        },
-        {
-          prop: "gps",
-          label: "GPS"
-        },
-        {
-          prop: "status",
-          label: "状态"
-        },
-        {
-          prop: "remark",
-          label: "备注"
-        }
-      ],
-      options: [
-        {
-          value: "",
-          label: "全部"
-        },
-        {
-          value: "1",
-          label: "启用"
-        },
-        {
-          value: "0",
-          label: "禁用"
-        }
-      ],
-      type: []
+      optionsStatus,
+      rules,
+      condition,
+      patrol_point_id: "",
+      ruleForm,
+      columnData,
+      options,
+      type: [],
+      restaurantsPatrolPoint: [],
+      restaurantsKKS: [],
+      isEdit: false
     };
   },
   created() {
@@ -234,33 +174,101 @@ export default {
       if (!this.dialogFormVisible) {
         this.$refs.ruleForm.resetFields();
         this.ruleForm = {
+          id: 0,
+          equipment_type_id: "",
           parent_kks: "",
-          number: "",
-          name: "",
-          password: "",
-          phoneNumber: "",
-          department: "",
-          post: "",
-          textareaText: "",
-          category: "",
-          equipment_name: ""
+          kks: "",
+          equipment_name: "",
+          patrol_point_id: "",
+          longitude: "",
+          latitude: "",
+          status: "",
+          remark: "",
+          initiative: false,
+          sensor_id: ""
         };
+        this.isEdit = false;
       } else {
-        // this.getLineAll();
         this.equipmentType();
+        this.getAllKKS();
       }
     }
   },
   mounted() {},
   methods: {
+    copy() {
+      this.$confirm("确认要复制吗？", "提示", {
+        confirmButtonText: "确定",
+        cancelButtonText: "取消",
+        type: "warning"
+      })
+        .then(() => {
+          this.ruleForm.id = 0;
+          this.ruleForm.kks = "";
+          this.ruleForm.equipment_name = "";
+          this.$message({
+            type: "success",
+            message: "复制成功!"
+          });
+        })
+        .catch(() => {
+          this.$message({
+            type: "info",
+            message: "已取消删除"
+          });
+        });
+    },
+    getAllKKS() {
+      this.$axios
+        .get(`${this.api}/equipment/getAllKKS`)
+        .then(res => {
+          if (res.data.retCode == 10000) {
+            const { data } = res.data;
+            this.restaurantsKKS = res.data.data.map(item => ({
+              id: item,
+              value: item
+            }));
+          }
+        })
+        .catch(err => {});
+    },
+    patrolPoint() {
+      this.$axios
+        .get(`${this.api}/patrolPoint/getAll`)
+        .then(res => {
+          if (res.data.retCode == 10000) {
+            const { data } = res.data;
+            this.restaurantsPatrolPoint = res.data.data.map(item => ({
+              id: item.value,
+              value: item.label
+            }));
+          }
+        })
+        .catch(err => {});
+    },
     changekks() {
       this.$axios
         .get(
-          `${this.api}/manage/equipment/checkKKS?id=${this.ruleForm.id}&kks=${
-            this.ruleForm.kks
-          }`
+          `${this.api}/equipment/checkKKS?id=${
+            this.ruleForm.id
+          }&kks=${encodeURIComponent(this.ruleForm.kks)}`
         )
-        .then(res => {});
+        .then(res => {
+          if (res.data.retCode == 10000) {
+            if (!res.data.data) {
+              this.$message({
+                message: "kks码可用",
+                type: "success"
+              });
+              this.ruleForm.equipment_name = this.ruleForm.kks;
+            } else {
+              this.$message({
+                message: "kks码重复",
+                type: "warning"
+              });
+            }
+          }
+        });
     },
     equipmentType() {
       this.$axios.get(`${this.api}/equipmentType/getAll`).then(res => {
@@ -268,18 +276,21 @@ export default {
         this.type = data;
       });
     },
-    changePage() {
+    changePage(page) {
       this.condition.pageIndex = page;
       this.getEquimentList();
     },
     submit(formName) {
       this.$refs[formName].validate(valid => {
         if (valid) {
+          this.ruleForm.patrol_point_id = this.patrol_point_id;
           this.$axios
             .post(`${this.api}/equipment/put`, this.ruleForm)
             .then(res => {
-              console.log(res);
-              this.dialogFormVisible = false;
+              if (res.data.retCode == 10000) {
+                this.dialogFormVisible = false;
+                this.getEquimentList();
+              }
             });
         } else {
           console.log("error submit!!");
@@ -296,138 +307,157 @@ export default {
       this.$axios
         .post(`${this.api}/equipment/getList`, this.condition)
         .then(res => {
-          const data = res.data.data.items;
-          this.total = res.data.data.total;
           this.loading = false;
           this.tableLoading = false;
-          data.forEach((item, index) => {
-            item.index = index + 1;
-            item.statusCode = item.status;
-            item.status = item.status == 1 ? "启用" : "禁用";
-            if (item.statusCode == 1) {
-              item.buttonInfo = [
-                {
-                  name: "edit",
-                  type: "primary",
-                  label: "编辑"
-                },
-                {
-                  name: "disable",
-                  type: "danger",
-                  label: "禁用"
-                }
-              ];
-            } else {
-              item.buttonInfo = [
-                {
-                  name: "edit",
-                  type: "primary",
-                  label: "编辑"
-                },
-                {
-                  name: "enable",
-                  type: "primary",
-                  label: "启用"
-                }
-              ];
-            }
-          });
-          this.tableData = data;
-          filter &&
-            this.$message({
-              message: "搜索成功",
-              type: "success"
+          if (res.data.retCode == 10000) {
+            const data = res.data.data.items;
+            this.total = res.data.data.total;
+            data.forEach((item, index) => {
+              item.index = index + 1 + (this.condition.pageIndex - 1) * 10;
+              item.statusCode = item.status;
+              item.status = item.status == 1 ? "启用" : "禁用";
+              if (item.statusCode == 1) {
+                item.buttonInfo = [
+                  {
+                    name: "edit",
+                    type: "primary",
+                    label: "编辑"
+                  },
+                  {
+                    name: "disable",
+                    type: "danger",
+                    label: "禁用"
+                  }
+                ];
+              } else {
+                item.buttonInfo = [
+                  {
+                    name: "edit",
+                    type: "primary",
+                    label: "编辑"
+                  },
+                  {
+                    name: "enable",
+                    type: "primary",
+                    label: "启用"
+                  }
+                ];
+              }
             });
-          console.log(res);
+            this.tableData = data;
+            filter &&
+              this.$message({
+                message: "搜索成功",
+                type: "success"
+              });
+          }
         })
         .catch(err => {
           this.loading = false;
           this.tableLoading = false;
         });
     },
-    beforeAvatarUpload(file) {
-      // const isJPG = file.type === "image/jpeg";
-      // const isLt2M = file.size / 1024 / 1024 < 2;
-      // if (!isJPG) {
-      //   this.$message.error("上传头像图片只能是 JPG 格式!");
-      // }
-      // if (!isLt2M) {
-      //   this.$message.error("上传头像图片大小不能超过 2MB!");
-      // }
-      // return isJPG && isLt2M;
-    },
-    handleAvatarSuccess(res, file) {
-      this.imageUrl = URL.createObjectURL(file.raw);
-    },
     querySearch(queryString, cb) {
-      this.$axios
-        .get(`${this.api}/equipment/getByKKSForPatrolPoint?kks=${queryString}`)
-        .then(res => {
-          const { data } = res.data;
-          data.value = data.equipment_name;
-          cb([data]);
-        })
-        .catch(err => {});
+      var restaurants = this.restaurantsKKS;
+      var results = queryString
+        ? restaurants.filter(this.createFilter(queryString))
+        : restaurants;
+      // 调用 callback 返回建议列表的数据
+      cb(results);
     },
-    handleSelect(item) {
+    querySearchPoint(queryString, cb) {
+      var restaurants = this.restaurantsPatrolPoint;
+      var results = queryString
+        ? restaurants.filter(this.createFilter(queryString))
+        : restaurants;
+      // 调用 callback 返回建议列表的数据
+      cb(results);
+    },
+    createFilter(queryString) {
+      return restaurant => {
+        return (
+          restaurant.value.toLowerCase().indexOf(queryString.toLowerCase()) ===
+          0
+        );
+      };
+    },
+    handleSelect(item) {},
+    handleSelectPoint(item) {
       console.log(item);
-      this.ruleForm.equipment_name = item.value;
+      this.patrol_point_id = item.id;
+      this.$axios
+        .post(`${this.api}/patrolPoint/get?id=${item.id}`)
+        .then(res => {
+          if (res.data.retCode === 10000) {
+            const { data } = res.data;
+            this.ruleForm.longitude = data.longitude;
+            this.ruleForm.latitude = data.latitude;
+          }
+        });
     },
     addClick() {
+      this.patrolPoint();
       this.dialogFormVisible = true;
     },
     edit(row) {
       this.dialogFormVisible = true;
-      this.$axios.get(`${this.api}/equipment/get?id=${row.id}`).then(res => {
-        console.log(res);
-        const { data } = res.data;
-        Object.assign(this.ruleForm, data);
+      this.isEdit = true;
+      new Promise((resolve, reject) => {
+        this.patrolPoint();
+        resolve();
+      }).then(() => {
+        this.$axios.get(`${this.api}/equipment/get?id=${row.id}`).then(res => {
+          const { data } = res.data;
+          this.restaurantsPatrolPoint.forEach(item => {
+            if (item.id == data.patrol_point_id) {
+              data.patrol_point_id = item.value;
+            }
+          });
+          Object.assign(this.ruleForm, data);
+        });
       });
     },
     enable(row) {
       this.$axios
-        .get(`${this.api}/equipmentType/changeState?id=${row.id}&user_id=1`)
+        .get(
+          `${this.api}/equipment/changeState?id=${row.id}&user_id=${
+            this.$store.state.app.user_id
+          }`
+        )
         .then(res => {
-          this.$message({
-            message: "操作成功",
-            type: "success"
-          });
-          row.buttonInfo.splice(1, 1, {
-            label: "禁用",
-            name: "disable",
-            type: "danger"
-          });
-          console.log(res);
+          if (res.data.retCode == 10000) {
+            this.$message({
+              message: "操作成功",
+              type: "success"
+            });
+            row.buttonInfo.splice(1, 1, {
+              label: "禁用",
+              name: "disable",
+              type: "danger"
+            });
+          }
         });
     },
     disable(row) {
       this.$axios
-        .get(`${this.api}/equipmentType/changeState?id=${row.id}&user_id=1`)
+        .get(
+          `${this.api}/equipment/changeState?id=${row.id}&user_id=${
+            this.$store.state.app.user_id
+          }`
+        )
         .then(res => {
-          row.buttonInfo.splice(1, 1, {
-            label: "启用",
-            name: "enable",
-            type: "primary"
-          });
-          this.$message({
-            message: "操作成功",
-            type: "success"
-          });
-          console.log(res);
+          if (res.data.retCode == 10000) {
+            row.buttonInfo.splice(1, 1, {
+              label: "启用",
+              name: "enable",
+              type: "primary"
+            });
+            this.$message({
+              message: "操作成功",
+              type: "success"
+            });
+          }
         });
-    },
-    fileClick() {
-      const link = document.createElement("a");
-      const body = document.querySelector("body");
-      const blob = new Blob([content]);
-      link.href = window.URL.createObjectURL(blob);
-      link.download = filename;
-      // fix Firefox
-      link.style.display = "none";
-      body.appendChild(link);
-      link.click();
-      body.removeChild(link);
-      window.URL.revokeObjectURL(link.href);
     }
   }
 };

@@ -28,14 +28,13 @@
 export default {
   name: "Login",
   created() {
-    console.log(this.$router);
   },
   data() {
     return {
       ruleForm: {
-        loginName: "",
-        password: ""
-        // loginName: "11"
+        loginName: "10000",
+        password: "123456",
+        application_code: "YUHUAN_WEB"
       },
       rules: {
         loginName: [
@@ -53,34 +52,8 @@ export default {
     submitForm(formName) {
       this.$refs[formName].validate(valid => {
         if (valid) {
-          alert(1111);
-          // this.$axios
-          //   .post(`${this.api}/user/login`, this.ruleForm)
-          //   .then(res => {
-          //     console.log(res);
-          //     window.localStorage.setItem(
-          //       "navList",
-          //       JSON.stringify(res.data.data)
-          //     );
-          //   });
-          this.$axios.post(`/getNav`).then(res => {
-            console.log(res);
-            window.localStorage.setItem(
-              "navList",
-              JSON.stringify(res.data.data)
-            );
-          });
-          // this.$router.push("/expertManage/expertList");
+          this.$store.dispatch("get_user_info", this.ruleForm);
         } else {
-          // this.$axios.post(`${this.api}getNav`).then(res => {
-          //   console.log(res);
-          //   window.localStorage.setItem(
-          //     "navList",
-          //     JSON.stringify(res.data.data)
-          //   );
-          // });
-          // console.log("error submit!!");
-          // return false;
         }
       });
     },

@@ -75,6 +75,8 @@ export default {
       formLabelWidth: "120px",
       dataTime: "",
       condition: {
+        pageIndex: "1",
+        pageSize: "10",
         kks: "",
         name: "",
         startTime: "",
@@ -135,7 +137,7 @@ export default {
   },
   mounted() {},
   methods: {
-    changePage() {
+    changePage(page) {
       this.condition.pageIndex = page;
       this.getList();
     },
@@ -148,21 +150,23 @@ export default {
       this.$axios
         .post(`${this.api}/patrolRecord/getList`, this.condition)
         .then(res => {
-          const data = res.data.data.items;
           this.tableLoading = false;
           this.loading = false;
-          this.total = res.data.data.total;
-          data.forEach((item, index) => {
-            item.index = index + 1;
-            item.buttonInfo = [
-              {
-                name: "getInfo",
-                type: "primary",
-                label: "曲线图"
-              }
-            ];
-          });
-          this.tableData = data;
+          if (res.data.retCode == 10000) {
+            const data = res.data.data.items;
+            this.total = res.data.data.total;
+            data.forEach((item, index) => {
+              item.index = index + 1 + (this.condition.pageIndex - 1) * 10;
+              item.buttonInfo = [
+                {
+                  name: "getInfo",
+                  type: "primary",
+                  label: "曲线图"
+                }
+              ];
+            });
+            this.tableData = data;
+          }
         });
     },
     chartInit() {
@@ -186,7 +190,6 @@ export default {
       for (var i = 0; i < 1000; i++) {
         data.push(randomData());
       }
-      console.log(data);
       myChart.setOption({
         title: {
           text: "实时数据"

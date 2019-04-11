@@ -33,6 +33,7 @@
         :tableData="tableData"
         :columnData="columnData"
         :loading="tableLoading"
+        :total="total"
         @getInfo="getInfo"
         @changePage="changePage"
       />
@@ -61,11 +62,11 @@ export default {
   },
   data() {
     return {
+      total: 0,
       loading: false,
       tableLoading: false,
       dialogFormVisible: false,
       innerVisible: false,
-      formLabelWidth: "120px",
       dataTime: "",
       condition: {
         pageIndex: 1,
@@ -117,7 +118,7 @@ export default {
   },
   mounted() {},
   methods: {
-    changePage() {
+    changePage(page) {
       this.condition.pageIndex = page;
       this.getList();
     },
@@ -136,24 +137,26 @@ export default {
         .then(res => {
           this.loading = false;
           this.tableLoading = false;
-          const data = res.data.data.items;
-          data.forEach((item, index) => {
-            item.index = index + 1;
-            item.buttonInfo = [
-              {
-                name: "getInfo",
-                type: "primary",
-                label: "查看"
-              }
-            ];
-          });
-          this.tableData = data;
-          filter &&
-            this.$message({
-              message: "搜索成功",
-              type: "success"
+          if (res.data.retCode == 10000) {
+            this.total = res.data.data.total;
+            const data = res.data.data.items;
+            data.forEach((item, index) => {
+              item.index = index + 1 + (this.condition.pageIndex - 1) * 10;
+              item.buttonInfo = [
+                {
+                  name: "getInfo",
+                  type: "primary",
+                  label: "查看"
+                }
+              ];
             });
-          console.log(res);
+            this.tableData = data;
+            filter &&
+              this.$message({
+                message: "搜索成功",
+                type: "success"
+              });
+          }
         })
         .catch(err => {
           this.loading = false;
@@ -164,9 +167,10 @@ export default {
       this.$axios
         .get(`${this.api}/guide/getFileList?id=${row.id}`)
         .then(res => {
-          console.log(res);
-          const { data } = res.data;
-          this.fileList = data;
+          if (res.data.retCode == 10000) {
+            const { data } = res.data;
+            this.fileList = data;
+          }
         });
     },
     bigImg() {

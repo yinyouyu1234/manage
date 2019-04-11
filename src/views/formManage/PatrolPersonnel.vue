@@ -205,7 +205,7 @@ export default {
   },
   mounted() {},
   methods: {
-    changePage() {
+    changePage(page) {
       this.condition.pageIndex = page;
       this.getList();
     },
@@ -345,28 +345,6 @@ export default {
       marker.enableMassClear(); //设置后可以隐藏改点的覆盖物
       marker.hide();
       lushu.start();
-      //绑定事件
-      // $("run").onclick = function() {
-      //   marker.enableMassClear(); //设置后可以隐藏改点的覆盖物
-      //   marker.hide();
-      //   lushu.start();
-      //   // map.clearOverlays();    //清除所有覆盖物
-      // };
-      // $("stop").onclick = function() {
-      //   lushu.stop();
-      // };
-      // $("pause").onclick = function() {
-      //   lushu.pause();
-      // };
-      // $("hide").onclick = function() {
-      //   lushu.hideInfoWindow();
-      // };
-      // $("show").onclick = function() {
-      //   lushu.showInfoWindow();
-      // };
-      // function $(element) {
-      //   return document.getElementById(element);
-      // }
     },
     filter() {
       this.getList();
@@ -378,21 +356,24 @@ export default {
       this.$axios
         .post(`${this.api}/patrolRecord/getList`, this.condition)
         .then(res => {
-          const data = res.data.data.items;
-          this.total = res.data.data.total;
           this.tableLoading = false;
           this.loading = false;
-          data.forEach((item, index) => {
-            item.index = index + 1;
-            item.buttonInfo = [
-              {
-                name: "getInfo",
-                type: "primary",
-                label: "查看"
-              }
-            ];
-          });
-          this.tableData = data;
+          if (res.data.retCode == 10000) {
+            const data = res.data.data.items;
+            this.total = res.data.data.total;
+            data.forEach((item, index) => {
+              item.index = index + 1 + (this.condition.pageIndex - 1) * 10;
+
+              item.buttonInfo = [
+                {
+                  name: "getInfo",
+                  type: "primary",
+                  label: "查看"
+                }
+              ];
+            });
+            this.tableData = data;
+          }
         });
     },
     getInfo(row) {

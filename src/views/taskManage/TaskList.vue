@@ -30,7 +30,12 @@
         @changePage="changePage"
       />
     </div>
-    <el-dialog title="添加菜单" width="600px" :visible.sync="dialogFormVisible">
+    <el-dialog
+      :close-on-click-modal="false"
+      title="添加菜单"
+      width="600px"
+      :visible.sync="dialogFormVisible"
+    >
       <el-form
         :model="ruleForm"
         :rules="rules"
@@ -41,10 +46,6 @@
         <el-form-item label="班次名称" prop="flights_name">
           <el-input size="mini" placeholder="请输入班次名称" v-model="ruleForm.flights_name"></el-input>
         </el-form-item>
-
-        <!-- <el-form-item label="班次时间" prop="flights_time">
-          <el-input size="mini" placeholder="请输入班次时间" v-model="ruleForm.flights_time"></el-input>
-        </el-form-item>-->
         <el-form-item label="班次时间" prop="flights_time">
           <el-time-picker
             size="mini"
@@ -88,11 +89,7 @@ export default {
       total: 0,
       tableLoading: false,
       loading: false,
-      count: 1,
       dialogFormVisible: false,
-      innerVisible: false,
-      formLabelWidth: "120px",
-      dataTime: "",
       condition: {
         pageIndex: "1",
         pageSize: "10",
@@ -103,7 +100,7 @@ export default {
         flights_name: "",
         flights_time: "",
         patrol_id: "",
-        user_id: "1"
+        user_id: this.$store.state.app.user_id
       },
       rules: {
         flights_name: [
@@ -143,16 +140,7 @@ export default {
           label: "状态"
         }
       ],
-      options: [
-        {
-          value: "选项1",
-          label: "应用程序1"
-        },
-        {
-          value: "选项2",
-          label: "应用程序2"
-        }
-      ]
+      options: []
     };
   },
   watch: {
@@ -164,7 +152,7 @@ export default {
           flights_name: "",
           flights_time: new Date(),
           patrol_id: "",
-          user_id: "1"
+          user_id: this.$store.state.app.user_id
         };
       } else {
         this.getLineAll();
@@ -176,7 +164,7 @@ export default {
   },
   mounted() {},
   methods: {
-    changePage() {
+    changePage(page) {
       this.condition.pageIndex = page;
       this.getFlightsList();
     },
@@ -186,7 +174,9 @@ export default {
     },
     getLineAll() {
       this.$axios.get(`${this.api}/patrolRoute/getAll`).then(res => {
-        console.log(res);
+        if (res.data.retCode == 10000) {
+          this.options = res.data.data;
+        }
       });
     },
     getFlightsList(filter = false) {
@@ -195,47 +185,49 @@ export default {
         .post(`${this.api}/flights/getFlightsList`, this.condition)
         .then(res => {
           this.loading = false;
-          this.total = res.data.data.total;
-          const data = res.data.data.items;
-          data.forEach((item, index) => {
-            item.index = index + 1;
-            item.statusCode = item.status;
-            item.status = item.status == 1 ? "启用" : "禁用";
-            if (item.statusCode == 1) {
-              item.buttonInfo = [
-                {
-                  name: "edit",
-                  type: "primary",
-                  label: "编辑"
-                },
-                {
-                  name: "disable",
-                  type: "danger",
-                  label: "禁用"
-                }
-              ];
-            } else {
-              item.buttonInfo = [
-                {
-                  name: "edit",
-                  type: "primary",
-                  label: "编辑"
-                },
-                {
-                  name: "enable",
-                  type: "primary",
-                  label: "启用"
-                }
-              ];
-            }
-          });
-          this.tableData = data;
-          filter &&
-            this.$message({
-              message: "搜索成功",
-              type: "success"
-            });
           this.tableLoading = false;
+          if (res.data.retCode == 10000) {
+            this.total = res.data.data.total;
+            const data = res.data.data.items;
+            data.forEach((item, index) => {
+              item.index = index + 1 + (this.condition.pageIndex - 1) * 10;
+              item.statusCode = item.status;
+              item.status = item.status == 1 ? "启用" : "禁用";
+              if (item.statusCode == 1) {
+                item.buttonInfo = [
+                  {
+                    name: "edit",
+                    type: "primary",
+                    label: "编辑"
+                  },
+                  {
+                    name: "disable",
+                    type: "danger",
+                    label: "禁用"
+                  }
+                ];
+              } else {
+                item.buttonInfo = [
+                  {
+                    name: "edit",
+                    type: "primary",
+                    label: "编辑"
+                  },
+                  {
+                    name: "enable",
+                    type: "primary",
+                    label: "启用"
+                  }
+                ];
+              }
+            });
+            this.tableData = data;
+            filter &&
+              this.$message({
+                message: "搜索成功",
+                type: "success"
+              });
+          }
         })
         .catch(err => {
           this.loading = false;
@@ -244,18 +236,28 @@ export default {
     },
     enable(row) {
       this.$axios
-        .get(`${this.api}/flights/changeState?id=${row.id}&user_id=1`)
+        .get(
+          `${this.api}/flights/changeState?id=${row.id}&user_id=${
+            this.$store.state.app.user_id
+          }`
+        )
         .then(res => {
-          this.$message({
-            message: "操作成功",
-            type: "success"
-          });
-          this.getFlightsList();
+          if (res.data.retCode == 10000) {
+            this.$message({
+              message: "操作成功",
+              type: "success"
+            });
+            this.getFlightsList();
+          }
         });
     },
     disable(row) {
       this.$axios
-        .get(`${this.api}/flights/changeState?id=${row.id}&user_id=1`)
+        .get(
+          `${this.api}/flights/changeState?id=${row.id}&user_id=${
+            this.$store.state.app.user_id
+          }`
+        )
         .then(res => {
           this.getFlightsList();
 
@@ -263,18 +265,18 @@ export default {
             message: "操作成功",
             type: "success"
           });
-          console.log(res);
         });
     },
     submit(formName) {
       this.$refs[formName].validate(valid => {
         if (valid) {
-          alert("submit!");
-          this.dialogFormVisible = false;
           this.$axios
             .post(`${this.api}/flights/put`, this.ruleForm)
             .then(res => {
-              console.log(res);
+              if (res.data.retCode == 10000) {
+                this.dialogFormVisible = false;
+                this.getFlightsList();
+              }
             });
         } else {
           console.log("error submit!!");
@@ -282,28 +284,19 @@ export default {
         }
       });
     },
-    handleCheckChange(data, checked, indeterminate) {
-      console.log(data, checked, indeterminate);
-    },
     addUser() {
       this.dialogFormVisible = true;
     },
     edit(row) {
       this.$axios.get(`${this.api}/flightstask/get?id=${row.id}`).then(res => {
-        console.log(res);
-        const { data } = res.data;
-        this.ruleForm.patrol_id = data.patrol_route_id;
-        // this.ruleForm.flights_time = row.flights_time;
-        this.ruleForm.flights_name = row.flights_name;
-        this.ruleForm.id = row.id;
-        const arr = row.flights_time.split(":");
-        this.dialogFormVisible = true;
-        const time = new Date(data.task_time);
-        time.setHours(arr[0]);
-        time.setMinutes(arr[1]);
-        this.ruleForm.flights_time = time;
-
-        console.log(time.toString());
+        if (res.data.retCode == 10000) {
+          const { data } = res.data;
+          this.ruleForm.patrol_id = data.patrol_route_id;
+          this.ruleForm.flights_name = row.flights_name;
+          this.ruleForm.id = row.id;
+          this.dialogFormVisible = true;
+          this.ruleForm.flights_time = new Date(row.flights_time);
+        }
       });
     }
   }

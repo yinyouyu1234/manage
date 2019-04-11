@@ -1,4 +1,4 @@
-<template>
+ <template>
   <div>
     <view-title title="缺陷管理" icon="icon-weiquexianquexianyuan"/>
     <search>
@@ -57,19 +57,17 @@
           :prop="item.prop"
           :label="item.label"
           :label-width="formLabelWidth"
-        >
-          {{item.value}}
-          <!-- <el-input size="mini" readonly v-model="item.value" autocomplete="off"></el-input> -->
-        </el-form-item>
+          class="defect-manage"
+        >{{item.value}}</el-form-item>
         <el-dialog width="50%" title :visible.sync="innerVisible" append-to-body>
-          <video-dialog/>
+          <video-dialog :url="bigImgUrl"/>
         </el-dialog>
       </el-form>
+      <image-list :list="imgShowDetail" @handleClick="bigImg"/>
       <div slot="footer" class="dialog-footer">
         <el-button @click="dialogFormVisible = false">取 消</el-button>
-        <el-button type="primary" @click="submit('ruleForm')">确 定</el-button>
+        <el-button type="primary" @click="submit('ruleForm')" v-if="status">确 定</el-button>
       </div>
-      <image-list :list="imgList" @handleClick="bigImg"/>
       <div class="discribe-box">
         <div class="left-title">消缺描述</div>
         <div class="right-content">
@@ -90,18 +88,20 @@
         </div>
         <div class="right-content">
           <el-upload
-            action="https://jsonplaceholder.typicode.com/posts/"
+            v-if="dialogFormVisible && status"
+            :action="url"
+            :headers="head"
+            :limit="5"
             list-type="picture-card"
             :on-preview="handlePictureCardPreview"
             :on-remove="handleRemove"
             :on-success="handleAvatarSuccess"
             :before-upload="beforeAvatarUpload"
-            v-if="status"
+            :on-exceed="handleExceed"
           >
             <i class="el-icon-plus"></i>
           </el-upload>
-          <image-list v-else :list="imgList" @handleClick="bigImg"/>
-
+          <image-list v-else :list="imgShow" @handleClick="bigImg"/>
           <el-dialog :visible.sync="dialogVisible" append-to-body>
             <img width="100%" :src="dialogImageUrl" alt>
           </el-dialog>
@@ -116,6 +116,8 @@ import Search from "@/components/Search.vue";
 import PcTable from "@/components/Table.vue";
 import ImageList from "@/components/ImageList.vue";
 import VideoDialog from "@/components/VideoDialog.vue";
+import { isImage } from "@/utils/isImage.js";
+
 export default {
   name: "DefectManage",
   components: {
@@ -126,11 +128,17 @@ export default {
     VideoDialog
   },
   data() {
+    const token = this.token;
     return {
+      imgList: [],
+      imgShow: [],
+      imgShowDetail: [],
+      bigImgUrl: "",
+      head: { token },
+      url: `${this.upload}/upload/uploadimg`,
       total: 0,
       dialogImageUrl: "",
       status: true,
-      imageUrl: "",
       loading: false,
       tableLoading: false,
       dialogFormVisible: false,
@@ -138,7 +146,6 @@ export default {
       dialogVisible: false,
       formLabelWidth: "120px",
       dataTime: "",
-      imgList: [],
       condition: {
         pageIndex: 1,
         pageSize: 10,
@@ -196,6 +203,8 @@ export default {
       ],
       formRule: {
         description: "",
+        patrol_record_id: "",
+        id: "",
         img: []
       },
       tableData: [],
@@ -235,7 +244,7 @@ export default {
           label: "巡检时间"
         },
         {
-          prop: "handle_state",
+          prop: "handle_state_name",
           label: "消缺状态"
         },
         {
@@ -266,16 +275,63 @@ export default {
   created() {
     this.getList();
   },
+  watch: {
+    dialogFormVisible() {
+      if (!this.dialogFormVisible) {
+        this.imgShowDetail = [];
+        this.formRule = {
+          description: "",
+          patrol_record_id: "",
+          id: "",
+          img: []
+        };
+      }
+    }
+  },
   mounted() {},
   methods: {
+    submit() {
+      this.formRule.img = this.imgList.map(item => item.url);
+      this.$axios
+        .post(`${this.api}/patrolRecordExceptionHandle/put`, this.formRule)
+        .then(res => {
+          if (res.data.retCode === 10000) {
+            this.getList();
+            this.dialogFormVisible = false;
+          }
+        });
+    },
+    handleExceed(files, fileList) {
+      this.$message({
+        message: "最多上传5张照片",
+        type: "warning"
+      });
+    },
     handlePictureCardPreview(file) {
       this.dialogImageUrl = file.url;
       this.dialogVisible = true;
     },
-    handleRemove(file, fileList) {
-      console.log(file, fileList);
+    beforeAvatarUpload(file) {
+      const imageFlag = isImage(file);
+      if (!imageFlag) {
+        this.$message.error("只能上传图片");
+      }
+      return imageFlag;
     },
-    changePage() {
+    handleAvatarSuccess(res, file) {
+      this.imgList.push({
+        url: res.data,
+        id: file.uid
+      });
+    },
+    handleRemove(file, fileList) {
+      this.imgList = this.imgList.filter((item, index) => {
+        if (item.id != file.uid) {
+          return item;
+        }
+      });
+    },
+    changePage(page) {
       this.condition.pageIndex = page;
       this.getList();
     },
@@ -290,59 +346,68 @@ export default {
       this.loading = true;
       this.tableLoading = true;
       this.$axios
-        .post(`${this.api}/patrolRecord/getList`, this.condition)
+        .post(`${this.api}/patrolRecord/getExceptionList`, this.condition)
         .then(res => {
-          console.log(res);
           this.tableLoading = false;
           this.loading = false;
-          this.total = res.data.data.total;
-          const data = res.data.data.items;
-          data.forEach((item, index) => {
-            item.index = index + 1;
-            item.handle_state = item.handle_state ? "已消缺" : "未消缺";
-            item.buttonInfo = [
-              {
-                name: "getInfo",
-                type: "primary",
-                label: "查看"
-              }
-            ];
-          });
-          this.tableData = data;
+          if (res.data.retCode == 10000) {
+            this.total = res.data.data.total;
+            const data = res.data.data.items;
+            data.forEach((item, index) => {
+              item.index = index + 1 + (this.condition.pageIndex - 1) * 10;
+              item.handle_state_name = item.handle_state ? "已消缺" : "未消缺";
+              item.buttonInfo = [
+                {
+                  name: "getInfo",
+                  type: "primary",
+                  label: "查看"
+                }
+              ];
+            });
+            this.tableData = data;
+          }
         });
     },
-    handleAvatarSuccess(res, file) {
-      console.log(res, file);
-    },
-    beforeAvatarUpload(file) {
-      const type = ["image/jpeg", "image/png"];
-      const isImage = type.indexOf(file.type) != -1;
-      if (!isImage) {
-        this.$message.error("只能上传图片");
-      }
-      return isImage;
-    },
+
     getInfo(row) {
       this.dialogFormVisible = true;
-      this.$axios
-        .get(`${this.api}/patrolRecord/getExceptionDetail?id=${row.id}`)
-        .then(res => {
-          console.log(res);
-          const { data } = res.data;
-          this.form.forEach(item => {
-            item.value = data[item.prop];
-          });
-          this.imgList = data.img;
-          console.log(data.img);
-        });
+      if (row.handle_state) {
+        this.status = false;
+        // 已消缺
+      } else {
+        // 未消缺
+        this.status = true;
+      }
       this.$axios
         .get(`${this.api}/patrolRecordExceptionHandle/get?id=${row.id}`)
         .then(res => {
-          console.log(res);
+          const { data } = res.data;
+          this.formRule.id = data.id;
+          if (!this.status) {
+            this.formRule.description = data.description;
+            if (data.img) {
+              this.imgShow = data.img;
+            } else {
+              this.imgShow = [];
+            }
+          }
+        });
+      this.$axios
+        .get(`${this.api}/patrolRecord/getExceptionDetail?id=${row.id}`)
+        .then(res => {
+          if (res.data.retCode == 10000) {
+            const { data } = res.data;
+            this.formRule.patrol_record_id = data.id;
+            this.form.forEach(item => {
+              item.value = data[item.prop];
+            });
+            this.imgShowDetail = data.img;
+          }
         });
     },
-    bigImg() {
+    bigImg(url) {
       this.innerVisible = true;
+      this.bigImgUrl = url;
     }
   }
 };
@@ -358,6 +423,9 @@ export default {
   .right-content {
     margin-left: 100px;
   }
+}
+.defect-manage.el-form-item {
+  margin-bottom: 0px;
 }
 </style>
 

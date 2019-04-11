@@ -7,6 +7,17 @@
           线路名称：
           <el-input size="mini" v-model="condition.patrol_root_name" clearable placeholder="请输入内容"></el-input>
         </el-col>
+        <el-col :span="5">
+          类型：
+          <el-select size="mini" v-model="condition.route_type" placeholder="请选择">
+            <el-option
+              v-for="item in optionsLine"
+              :key="item.value"
+              :label="item.label"
+              :value="item.value"
+            ></el-option>
+          </el-select>
+        </el-col>
         <el-col :span="4">
           <el-button size="mini" @click="filter" :loading="loading">查询</el-button>
           <el-button size="mini" type="primary" @click="addClick">添加</el-button>
@@ -25,7 +36,12 @@
         @changePage="changePage"
       />
     </div>
-    <el-dialog title="基本信息" width="750px" :visible.sync="dialogFormVisible">
+    <el-dialog
+      :close-on-click-modal="false"
+      title="基本信息"
+      width="800px"
+      :visible.sync="dialogFormVisible"
+    >
       <el-form :model="ruleForm" :rules="rules" ref="ruleForm">
         <el-form-item prop="patrol_name" label="线路名称" :label-width="formLabelWidth">
           <el-input size="mini" v-model="ruleForm.patrol_name"></el-input>
@@ -40,23 +56,49 @@
             ></el-option>
           </el-select>
         </el-form-item>
+        <el-form-item label="上传图片" :label-width="formLabelWidth">
+          <el-upload
+            v-if="dialogFormVisible"
+            :action="url"
+            list-type="picture-card"
+            :limit="1"
+            :headers="head"
+            :on-preview="handlePictureCardPreview"
+            :on-remove="handleRemove"
+            :on-success="handleAvatarSuccess"
+            :before-upload="beforeAvatarUpload"
+            :on-exceed="handleExceed"
+            :file-list="fileList"
+          >
+            <i class="el-icon-plus"></i>
+          </el-upload>
+          <el-dialog :visible.sync="dialogVisible" append-to-body>
+            <img width="100%" :src="dialogImageUrl" alt>
+          </el-dialog>
+        </el-form-item>
       </el-form>
       <hr style="margin-bottom:20px;">
       <div class="line-manage-layout--box" style="padding:20px">
         <div class="left-box">
           <div class="line-manage-leftnav">
             <div class="title">巡检点</div>
-            <ul>
+            <ul class="point-nav-box">
               <li
+                class="point-nav--item"
                 v-for="(item) in list"
                 :key="item.id"
-                :class="{active:item.active}"
+                :class="{myActive:item.active}"
                 @click="handleClick(item)"
               >{{item.patrol_point_name}}</li>
             </ul>
           </div>
           <div class="line-manage-left-table">
-            <el-transfer v-model="value1" :titles="transferTitle" :data="data"></el-transfer>
+            <el-transfer
+              @change="changeTransfer"
+              v-model="value1"
+              :titles="transferTitle"
+              :data="data"
+            ></el-transfer>
           </div>
         </div>
       </div>
@@ -71,6 +113,7 @@
 import ViewTitle from "@/components/ViewTitle.vue";
 import Search from "@/components/Search.vue";
 import PcTable from "@/components/Table.vue";
+import { isImage } from "@/utils/isImage.js";
 export default {
   name: "LineManage",
   components: {
@@ -79,19 +122,24 @@ export default {
     PcTable
   },
   data() {
+    const token = this.token;
     return {
+      dialogImageUrl: "",
+      dialogVisible: false,
+      fileList: [],
+      imgList: "",
+      head: { token },
+      url: `${this.upload}/upload/uploadimg`,
       total: 0,
+      hasSelectList: [],
       data: [],
       loading: false,
       tableLoading: false,
       transferTitle: ["巡检点设备", "已选择设备"],
       value1: [],
-      state2: "",
       imageUrl: "",
       dialogFormVisible: false,
-      innerVisible: false,
       formLabelWidth: "120px",
-      dataTime: "",
       list: [
         {
           label: "巡检点1",
@@ -117,11 +165,16 @@ export default {
         ]
       },
       condition: {
-        patrol_root_name: ""
+        pageIndex: 1,
+        pageSize: 10,
+        patrol_root_name: "",
+        route_type: 0
       },
       ruleForm: {
+        id: "",
         patrol_name: "",
-        status: ""
+        status: "",
+        img: ""
       },
       tableData: [],
       columnData: [
@@ -138,6 +191,20 @@ export default {
         {
           prop: "remark",
           label: "备注"
+        }
+      ],
+      optionsLine: [
+        {
+          value: 0,
+          label: "全部"
+        },
+        {
+          value: 1,
+          label: "常规巡检"
+        },
+        {
+          value: 2,
+          label: "随机巡检"
         }
       ],
       options: [
@@ -159,10 +226,15 @@ export default {
       } else {
         this.$refs.ruleForm.resetFields();
         this.value1 = [];
+        (this.imgList = ""), (this.fileList = []);
         this.ruleForm = {
+          id: "",
           patrol_name: "",
-          status: ""
+          status: "",
+          img: ""
         };
+        this.data = [];
+        this.hasSelectList = [];
       }
     }
   },
@@ -171,25 +243,61 @@ export default {
   },
   mounted() {},
   methods: {
-    changePage() {
+    handleRemove(file, fileList) {
+      this.imgList = "";
+    },
+    handlePictureCardPreview(file) {
+      this.dialogImageUrl = file.url;
+      this.dialogVisible = true;
+    },
+    handleAvatarSuccess(res, file) {
+      this.imgList = res.data;
+      this.imageUrl = URL.createObjectURL(file.raw);
+    },
+    beforeAvatarUpload(file) {
+      const imageFlag = isImage(file);
+      if (!imageFlag) {
+        this.$message.error("只能上传图片");
+      }
+      return imageFlag;
+    },
+    handleExceed(files, fileList) {
+      this.$message({
+        message: "只可以上传一张照片",
+        type: "warning"
+      });
+    },
+    changePage(page) {
       this.condition.pageIndex = page;
       this.getData();
     },
     submit(formName) {
       this.$refs[formName].validate(valid => {
         if (valid) {
+          if (this.imgList == "") {
+            this.$message({
+              message: "请上传图片",
+              type: "warning"
+            });
+            return;
+          }
           const arr = this.value1.map((item, index) => {
             return {
               equipment_id: item,
               sort: index
             };
           });
-
-          this.$axios.post(`${this.api}/patrolRoute/put`, {
-            ...this.ruleForm,
-            equipment_route: arr
-          });
-          this.dialogFormVisible = false;
+          this.ruleForm.img = this.imgList;
+          this.$axios
+            .post(`${this.api}/patrolRoute/put`, {
+              ...this.ruleForm,
+              equipment_route: arr
+            })
+            .then(res => {
+              if (res.data.retCode == 10000) {
+                this.dialogFormVisible = false;
+              }
+            });
         } else {
           console.log("error submit!!");
           return false;
@@ -206,49 +314,50 @@ export default {
       this.$axios
         .post(`${this.api}/patrolRoute/getList`, this.condition)
         .then(res => {
-          const data = res.data.data.items;
           this.loading = false;
           this.tableLoading = false;
-          this.total = res.data.data.total;
-          data.forEach((item, index) => {
-            item.index = index + 1;
-            item.statusCode = item.status;
-            item.status = item.status == 1 ? "启用" : "禁用";
-            if (item.statusCode == 1) {
-              item.buttonInfo = [
-                {
-                  name: "edit",
-                  type: "primary",
-                  label: "编辑"
-                },
-                {
-                  name: "disable",
-                  type: "danger",
-                  label: "禁用"
-                }
-              ];
-            } else {
-              item.buttonInfo = [
-                {
-                  name: "edit",
-                  type: "primary",
-                  label: "编辑"
-                },
-                {
-                  name: "enable",
-                  type: "primary",
-                  label: "启用"
-                }
-              ];
-            }
-          });
-          this.tableData = data;
-          filter &&
-            this.$message({
-              message: "搜索成功",
-              type: "success"
+          if (res.data.retCode == 10000) {
+            const data = res.data.data.items;
+            this.total = res.data.data.total;
+            data.forEach((item, index) => {
+              item.index = index + 1 + (this.condition.pageIndex - 1) * 10;
+              item.statusCode = item.status;
+              item.status = item.status == 1 ? "启用" : "禁用";
+              if (item.statusCode == 1) {
+                item.buttonInfo = [
+                  {
+                    name: "edit",
+                    type: "primary",
+                    label: "编辑"
+                  },
+                  {
+                    name: "disable",
+                    type: "danger",
+                    label: "禁用"
+                  }
+                ];
+              } else {
+                item.buttonInfo = [
+                  {
+                    name: "edit",
+                    type: "primary",
+                    label: "编辑"
+                  },
+                  {
+                    name: "enable",
+                    type: "primary",
+                    label: "启用"
+                  }
+                ];
+              }
             });
-          console.log(res);
+            this.tableData = data;
+            filter &&
+              this.$message({
+                message: "搜索成功",
+                type: "success"
+              });
+          }
         })
         .catch(err => {
           this.loading = false;
@@ -257,34 +366,44 @@ export default {
     },
     enable(row) {
       this.$axios
-        .get(`${this.api}/patrolRoute/changeState?id=${row.id}&user_id=1`)
+        .get(
+          `${this.api}/patrolRoute/changeState?id=${row.id}&user_id=${
+            this.$store.state.app.user_id
+          }`
+        )
         .then(res => {
-          this.$message({
-            message: "操作成功",
-            type: "success"
-          });
-          row.buttonInfo.splice(1, 1, {
-            label: "禁用",
-            name: "disable",
-            type: "danger"
-          });
-          console.log(res);
+          if (res.data.retCode == 10000) {
+            this.$message({
+              message: "操作成功",
+              type: "success"
+            });
+            row.buttonInfo.splice(1, 1, {
+              label: "禁用",
+              name: "disable",
+              type: "danger"
+            });
+          }
         });
     },
     disable(row) {
       this.$axios
-        .get(`${this.api}/patrolRoute/changeState?id=${row.id}&user_id=1`)
+        .get(
+          `${this.api}/patrolRoute/changeState?id=${row.id}&user_id=${
+            this.$store.state.app.user_id
+          }`
+        )
         .then(res => {
-          row.buttonInfo.splice(1, 1, {
-            label: "启用",
-            name: "enable",
-            type: "primary"
-          });
-          this.$message({
-            message: "操作成功",
-            type: "success"
-          });
-          console.log(res);
+          if (res.data.retCode == 10000) {
+            row.buttonInfo.splice(1, 1, {
+              label: "启用",
+              name: "enable",
+              type: "primary"
+            });
+            this.$message({
+              message: "操作成功",
+              type: "success"
+            });
+          }
         });
     },
     getAllPoint() {
@@ -295,28 +414,15 @@ export default {
           patrol_point_name: ""
         })
         .then(res => {
-          const data = res.data.data.items;
-          data.forEach((item, index) => {
-            item.active = index === 0 ? true : false;
-          });
-          this.list = data;
-          this.handleClick(this.list[0]);
+          if (res.data.retCode == 10000) {
+            const data = res.data.data.items;
+            data.forEach((item, index) => {
+              item.active = index === 0 ? true : false;
+            });
+            this.list = data;
+          }
         })
         .catch(err => {});
-    },
-    beforeAvatarUpload(file) {
-      // const isJPG = file.type === "image/jpeg";
-      // const isLt2M = file.size / 1024 / 1024 < 2;
-      // if (!isJPG) {
-      //   this.$message.error("上传头像图片只能是 JPG 格式!");
-      // }
-      // if (!isLt2M) {
-      //   this.$message.error("上传头像图片大小不能超过 2MB!");
-      // }
-      // return isJPG && isLt2M;
-    },
-    handleAvatarSuccess(res, file) {
-      this.imageUrl = URL.createObjectURL(file.raw);
     },
     querySearch(queryString, cb) {
       var restaurants = this.restaurants;
@@ -326,12 +432,8 @@ export default {
       // 调用 callback 返回建议列表的数据
       cb(results);
     },
-    handleSelect(item) {
-      console.log(item);
-    },
+    handleSelect(item) {},
     addClick() {
-      console.log(this.$router.options.routes);
-
       this.dialogFormVisible = true;
     },
     edit(row) {
@@ -340,45 +442,38 @@ export default {
     },
     patrolRoute(id) {
       this.$axios.get(`${this.api}/patrolRoute/get?id=${id}`).then(res => {
-        console.log(res);
-        this.ruleForm = {
-          patrol_name: res.data.data.patrol_name,
-          status: res.data.data.status
-        };
-        console.log(this.ruleForm);
-        let data = res.data.data.equipment_route;
-        data = data.map(item => {
-          this.value1.push(item.id);
-          return { key: item.id, label: item.equipment_name };
-        });
-        console.log(data);
-        const arr = this.data.concat(data);
-
-        for (var i = 0; i < arr.length; i++) {
-          for (var l = i + 1; l < arr.length; l++) {
-            if (arr[i].key == arr[l].key) {
-              arr.splice(l, 1);
-            }
+        if (res.data.retCode == 10000) {
+          this.ruleForm = {
+            id,
+            patrol_name: res.data.data.patrol_name,
+            status: res.data.data.status,
+            img: ""
+          };
+          if (res.data.data.img) {
+            this.fileList.push({
+              url: res.data.data.img
+            });
+            this.imgList = res.data.data.img;
           }
+          let data = res.data.data.equipment_route;
+          data = data.map(item => {
+            this.value1.push(item.id);
+            return { key: item.id, label: item.equipment_name };
+          });
+          const arr = data;
+          this.data = data;
+          this.hasSelectList = data;
         }
-        this.data = data;
       });
     },
-    bigImg() {
-      this.innerVisible = true;
-    },
-    fileClick() {
-      const link = document.createElement("a");
-      const body = document.querySelector("body");
-      const blob = new Blob([content]);
-      link.href = window.URL.createObjectURL(blob);
-      link.download = filename;
-      // fix Firefox
-      link.style.display = "none";
-      body.appendChild(link);
-      link.click();
-      body.removeChild(link);
-      window.URL.revokeObjectURL(link.href);
+    changeTransfer() {
+      this.data.forEach(item => {
+        this.value1.forEach(ele => {
+          if (item.key == ele) {
+            this.hasSelectList.push(item);
+          }
+        });
+      });
     },
     handleClick(item) {
       this.list.forEach(ele => {
@@ -388,12 +483,21 @@ export default {
       this.$axios
         .get(`${this.api}/equipment/getByPatrolPoint?id=${item.id}`)
         .then(res => {
-          let data = res.data.data;
-          data = data.map(item => {
-            return { key: item.value, label: item.name };
-          });
-          this.data = data;
-          console.log(data);
+          if (res.data.retCode == 10000) {
+            let data = res.data.data;
+            data = data.map(item => {
+              return { key: item.value, label: item.label };
+            });
+            const arr = this.hasSelectList.concat(data);
+            for (var i = 0; i < arr.length; i++) {
+              for (var l = i + 1; l < arr.length; l++) {
+                if (arr[i].key == arr[l].key) {
+                  arr.splice(l, 1);
+                }
+              }
+            }
+            this.data = arr;
+          }
         })
         .catch(err => {});
     }
@@ -422,6 +526,7 @@ export default {
       }
       .line-manage-left-table {
         float: left;
+        margin-top: 40px;
       }
     }
     .right-box {
@@ -437,10 +542,6 @@ export default {
   }
   .labels {
     display: inline-block;
-    // width: 120px;
-    // text-align: right;
-    // padding-right: 12px;
-    // box-sizing: border-box;
   }
   .label {
     display: inline-block;
@@ -449,8 +550,18 @@ export default {
     padding-right: 12px;
     box-sizing: border-box;
   }
-  .active {
-    color: @backgroundColor;
+  .point-nav--item {
+    transition: all 0.3s;
+  }
+  .myActive {
+    color: #fff;
+    background: @backgroundColor;
+  }
+  .point-nav-box {
+    height: 400px;
+    overflow: auto;
+    border: 1px solid #ebeef5;
+    border-radius: 4px;
   }
 }
 </style>

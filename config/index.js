@@ -11,24 +11,26 @@ module.exports = {
     assetsSubDirectory: 'static',
     assetsPublicPath: '/',
     proxyTable: {
-      '/api': {
-        target: 'http://47.100.122.174:8889/manage',
-        changeOrigin: true,
-        pathRewrite: {
-          '^/api': ''
-        }
-      },
-      '/upload': {
-        target: 'http://47.100.122.174:8889',
-        changeOrigin: true,
-        pathRewrite: {
-          '^/upload': ''
-        }
-      }
+      // '/api': {
+      //   // target: 'http://47.100.122.174:8889/manage',
+      //   target: 'http://yuhuantestapi.yunweiyan.com/manage',
+      //   changeOrigin: true,
+      //   pathRewrite: {
+      //     '^/api': ''
+      //   }
+      // },
+      // '/upload': {
+      //   // target: 'http://47.100.122.174:8889',
+      //   target: 'http://yuhuantestapi.yunweiyan.com',
+      //   changeOrigin: true,
+      //   pathRewrite: {
+      //     '^/upload': ''
+      //   }
+      // }
     },
 
     // Various Dev Server settings
-    host: 'localhost', // can be overwritten by process.env.HOST
+    host: '0.0.0.0', // can be overwritten by process.env.HOST
     port: 8080, // can be overwritten by process.env.PORT, if port is in use, a free one will be determined
     autoOpenBrowser: false,
     errorOverlay: true,
@@ -65,13 +67,13 @@ module.exports = {
     // Paths
     assetsRoot: path.resolve(__dirname, '../dist'),
     assetsSubDirectory: 'static',
-    assetsPublicPath: '/',
+    assetsPublicPath: './',
 
     /**
      * Source Maps
      */
 
-    productionSourceMap: true,
+    productionSourceMap: false,
     // https://webpack.js.org/configuration/devtool/#production
     devtool: '#source-map',
 

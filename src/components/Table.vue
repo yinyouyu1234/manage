@@ -30,6 +30,7 @@
               :key="item.name"
               @click="handleClick(scope.row, item, true)"
               :type="item.type"
+              :disabled="item.disabled"
               size="mini"
             >{{item.label}}</el-button>
           </template>
@@ -105,11 +106,8 @@ export default {
     this.myTableData = this.tableData;
   },
   methods: {
-    handleSizeChange(val) {
-      console.log(`每页 ${val} 条`);
-    },
+    handleSizeChange(val) {},
     handleCurrentChange(val) {
-      console.log(`当前页: ${val}`);
       this.$emit("changePage", val);
     },
     handleClick(row, item, isButton) {
@@ -117,7 +115,6 @@ export default {
       return false;
     },
     rowClick(row, column, event) {
-      console.log(event.target.nodeName);
       if (event.target.nodeName != "I") {
         this.$emit("rowClick", row);
       }

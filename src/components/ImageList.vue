@@ -1,6 +1,6 @@
 <template>
   <div class="image-list--wrapper">
-    <img v-for="(item, index) in myList" :key="index" @click="handleClick" :src="url" alt>
+    <img v-for="(item, index) in myList" :key="index" @click="handleClick(item)" :src="item" alt>
   </div>
 </template>
 <script>
@@ -25,11 +25,10 @@ export default {
   },
   created() {
     this.myList = this.list;
-    console.log();
   },
   methods: {
-    handleClick() {
-      this.$emit("handleClick");
+    handleClick(url) {
+      this.$emit("handleClick", url);
     }
   }
 };

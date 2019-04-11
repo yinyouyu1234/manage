@@ -29,13 +29,19 @@
         :tableData="tableData"
         :columnData="columnData"
         :total="total"
+        :loading="tableLoading"
         @edit="edit"
         @disable="disable"
         @enable="enable"
         @changePage="changePage"
       />
     </div>
-    <el-dialog width="600px" title="添加菜单" :visible.sync="dialogFormVisible">
+    <el-dialog
+      :close-on-click-modal="false"
+      width="600px"
+      title="添加菜单"
+      :visible.sync="dialogFormVisible"
+    >
       <el-form
         :model="ruleForm"
         :rules="rules"
@@ -44,7 +50,12 @@
         class="demo-ruleForm"
       >
         <el-form-item label="选择程序" prop="id">
-          <el-select size="mini" @change="changeCode" v-model="ruleForm.id" placeholder="请选择">
+          <el-select
+            size="mini"
+            @change="changeCode"
+            v-model="ruleForm.application_code"
+            placeholder="请选择"
+          >
             <el-option
               v-for="item in options"
               :key="item.value"
@@ -67,7 +78,27 @@
           <el-input size="mini" placeholder="请输入菜单名称" v-model="ruleForm.menu_name"></el-input>
         </el-form-item>
         <el-form-item label="图标">
-          <el-input size="mini" placeholder="请输入图标名称" v-model="ruleForm.menu_icon"></el-input>
+          <el-input
+            size="mini"
+            v-if="condition.application_code == 'YUHUAN_WEB'"
+            placeholder="请输入图标名称"
+            v-model="ruleForm.icon"
+          ></el-input>
+          <el-upload
+            v-if="dialogFormVisible && condition.application_code == 'YUHUAN_APP'"
+            :action="url"
+            list-type="picture-card"
+            :limit="1"
+            :headers="head"
+            :on-preview="handlePictureCardPreview"
+            :on-remove="handleRemove"
+            :on-success="handleAvatarSuccess"
+            :before-upload="beforeAvatarUpload"
+            :on-exceed="handleExceed"
+            :file-list="fileList"
+          >
+            <i class="el-icon-plus"></i>
+          </el-upload>
         </el-form-item>
         <el-form-item label="URL" prop="url">
           <el-input size="mini" placeholder="请输入url" v-model="ruleForm.url"></el-input>
@@ -87,6 +118,7 @@
 import ViewTitle from "@/components/ViewTitle.vue";
 import Search from "@/components/Search.vue";
 import PcTable from "@/components/Table.vue";
+import { isImage } from "@/utils/isImage.js";
 export default {
   name: "UserManage",
   components: {
@@ -95,13 +127,15 @@ export default {
     PcTable
   },
   data() {
+    const token = this.token;
     return {
+      fileList: [],
+      imgList: "",
+      head: { token },
+      url: `${this.upload}/upload/uploadimg`,
       total: 0,
-      count: 1,
+      tableLoading: false,
       dialogFormVisible: false,
-      innerVisible: false,
-      formLabelWidth: "120px",
-      dataTime: "",
       condition: {
         pageIndex: "1",
         pageSize: "10",
@@ -112,16 +146,19 @@ export default {
         menu_name: "",
         url: "",
         sort: "",
-        user_id: "",
+        application_code: "",
         parent_id: "",
-        menu_icon: ""
+        icon: ""
       },
       rules: {
-        id: [{ required: true, message: "请选择程序", trigger: "blur" }],
+        application_code: [
+          { required: true, message: "请选择程序", trigger: "blur" }
+        ],
         menu_name: [
           { required: true, message: "请输入菜单名称", trigger: "blur" }
         ],
         url: [{ required: true, message: "请输入url", trigger: "blur" }],
+        parent_id: [{ required: true, message: "请输入url", trigger: "blur" }],
         sort: [{ required: true, message: "请输入排序", trigger: "blur" }]
       },
       tableData: [],
@@ -165,17 +202,45 @@ export default {
           menu_name: "",
           url: "",
           sort: "",
-          user_id: ""
+          application_code: "",
+          parent_id: "",
+          icon: ""
         };
+        this.imgList = "";
+        this.fileList = [];
+      } else {
+        this.getByApplication();
       }
     }
   },
   created() {
-    this.getMenuList();
     this.getApp();
   },
   mounted() {},
   methods: {
+    handleRemove(file, fileList) {
+      this.imgList = "";
+    },
+    handlePictureCardPreview(file) {
+      this.dialogImageUrl = file.url;
+      this.dialogVisible = true;
+    },
+    handleAvatarSuccess(res, file) {
+      this.imgList = res.data;
+    },
+    beforeAvatarUpload(file) {
+      const imageFlag = isImage(file);
+      if (!imageFlag) {
+        this.$message.error("只能上传图片");
+      }
+      return imageFlag;
+    },
+    handleExceed(files, fileList) {
+      this.$message({
+        message: "只可以上传一张照片",
+        type: "warning"
+      });
+    },
     changeCode() {
       this.getByApplication();
     },
@@ -183,17 +248,19 @@ export default {
       this.$axios
         .get(
           `${this.api}/menu/getByApplication?application_code=${
-            this.ruleForm.id
+            this.ruleForm.application_code
           }`
         )
         .then(res => {
-          const { data } = res.data;
-          this.parentOptions = data.map(item => {
-            return {
-              label: item.menu_name,
-              value: item.id
-            };
-          });
+          if (res.data.retCode == 10000) {
+            const { data } = res.data;
+            this.parentOptions = data.map(item => {
+              return {
+                label: item.menu_name,
+                value: item.id
+              };
+            });
+          }
         });
     },
     changePage(page) {
@@ -204,36 +271,41 @@ export default {
       this.$axios
         .get(`${this.api}/application/getAll`)
         .then(res => {
-          console.log(res);
-          let { data } = res.data;
-          data = data.map(item => {
-            return {
-              ...item,
-              value: item.id,
-              label: item.application_name
-            };
-          });
-          this.options = data;
-          this.options.unshift({
-            value: "",
-            label: "全部"
-          });
+          if (res.data.retCode == 10000) {
+            let { data } = res.data;
+            data = data.map(item => {
+              return {
+                ...item,
+                value: item.application_code,
+                label: item.application_name
+              };
+            });
+            this.condition.application_code = data[0].value;
+            this.ruleForm.application_code = data[0].value;
+            this.options = data;
+            this.getMenuList();
+          }
         })
         .catch(err => {});
     },
     submit(formName) {
       this.$refs[formName].validate(valid => {
         if (valid) {
+          if (this.condition.application_code == "YUHUAN_APP") {
+            this.ruleForm.icon = this.imgList;
+          }
           this.$axios
             .post(`${this.api}/menu/put`, this.ruleForm)
             .then(res => {
-              console.log(res);
               this.dialogFormVisible = false;
-              this.$message({
-                message: "添加成功",
-                type: "success"
-              });
               this.dialogFormVisible = false;
+              if (res.data.retCode == 10000) {
+                this.$message({
+                  message: "添加成功",
+                  type: "success"
+                });
+                this.getMenuList();
+              }
             })
             .catch(err => {
               console.log(err);
@@ -245,93 +317,110 @@ export default {
       });
     },
     handleChange() {
+      this.ruleForm.application_code = this.condition.application_code;
       this.getMenuList();
     },
     getMenuList() {
+      this.tableLoading = true;
       this.$axios
         .post(`${this.api}/menu/getList`, this.condition)
         .then(res => {
-          console.log(res);
-          this.total = res.data.data.total;
-          const data = res.data.data.items;
-          data.map((item, index) => {
-            item.index = index + 1;
-            item.statusCode = item.status;
-            item.status = item.status == 1 ? "启用" : "禁用";
-            if (item.statusCode == 1) {
-              item.buttonInfo = [
-                {
-                  name: "edit",
-                  type: "primary",
-                  label: "编辑"
-                },
-                {
-                  name: "disable",
-                  type: "danger",
-                  label: "禁用"
-                }
-              ];
-            } else {
-              item.buttonInfo = [
-                {
-                  name: "edit",
-                  type: "primary",
-                  label: "编辑"
-                },
-                {
-                  name: "enable",
-                  type: "primary",
-                  label: "启用"
-                }
-              ];
-            }
-          });
-          this.tableData = data;
+          this.tableLoading = false;
+          if (res.data.retCode == 10000) {
+            this.total = res.data.data.total;
+            const data = res.data.data.items;
+            data.map((item, index) => {
+              item.index = index + 1 + (this.condition.pageIndex - 1) * 10;
+              item.statusCode = item.status;
+              item.status = item.status == 1 ? "启用" : "禁用";
+              if (item.statusCode == 1) {
+                item.buttonInfo = [
+                  {
+                    name: "edit",
+                    type: "primary",
+                    label: "编辑"
+                  },
+                  {
+                    name: "disable",
+                    type: "danger",
+                    label: "禁用"
+                  }
+                ];
+              } else {
+                item.buttonInfo = [
+                  {
+                    name: "edit",
+                    type: "primary",
+                    label: "编辑"
+                  },
+                  {
+                    name: "enable",
+                    type: "primary",
+                    label: "启用"
+                  }
+                ];
+              }
+            });
+            this.tableData = data;
+          }
         })
         .catch(err => {
           console.log(err);
         });
-    },
-    handleCheckChange(data, checked, indeterminate) {
-      console.log(data, checked, indeterminate);
     },
     addUser() {
       this.dialogFormVisible = true;
     },
     edit(row) {
       this.dialogFormVisible = true;
-      Object.assign(this.ruleForm, row);
+      this.$axios.get(`${this.api}/menu/get?id=${row.id}`).then(res => {
+        if (res.data.retCode == 10000) {
+          const { data } = res.data;
+          if (data.icon) {
+            this.fileList = [
+              {
+                url: data.icon
+              }
+            ];
+          }
+          this.imgList = data.icon;
+          Object.assign(this.ruleForm, data);
+          this.getByApplication();
+        }
+      });
     },
     enable(row) {
       this.$axios
-        .get(`${this.api}/menu/changeSate?id=${row.id}&user_id=1`)
+        .get(
+          `${this.api}/menu/changeSate?id=${row.id}&user_id=${
+            this.$store.state.app.user_id
+          }`
+        )
         .then(res => {
-          this.$message({
-            message: "操作成功",
-            type: "success"
-          });
-          row.buttonInfo.splice(1, 1, {
-            label: "禁用",
-            name: "disable",
-            type: "danger"
-          });
-          console.log(res);
+          if (res.data.retCode == 10000) {
+            this.getMenuList();
+            this.$message({
+              message: "操作成功",
+              type: "success"
+            });
+          }
         });
     },
     disable(row) {
       this.$axios
-        .get(`${this.api}/menu/changeSate?id=${row.id}&user_id=1`)
+        .get(
+          `${this.api}/menu/changeSate?id=${row.id}&user_id=${
+            this.$store.state.app.user_id
+          }`
+        )
         .then(res => {
-          row.buttonInfo.splice(1, 1, {
-            label: "启用",
-            name: "enable",
-            type: "primary"
-          });
-          this.$message({
-            message: "操作成功",
-            type: "success"
-          });
-          console.log(res);
+          if (res.data.retCode == 10000) {
+            this.getMenuList();
+            this.$message({
+              message: "操作成功",
+              type: "success"
+            });
+          }
         });
     }
   }

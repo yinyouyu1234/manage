@@ -59,6 +59,8 @@ export default {
       formLabelWidth: "120px",
       dataTime: "",
       condition: {
+        pageIndex: "1",
+        pageSize: "10",
         kks: "",
         name: "",
         startTime: "",
@@ -106,7 +108,7 @@ export default {
   },
   mounted() {},
   methods: {
-    changePage() {
+    changePage(page) {
       this.condition.pageIndex = page;
       this.getList();
     },
@@ -119,14 +121,16 @@ export default {
       this.$axios
         .post(`${this.api}/patrolRecord/getList`, this.condition)
         .then(res => {
-          const data = res.data.data.items;
-          this.total = res.data.data.total;
           this.tableLoading = false;
           this.loading = false;
-          data.forEach((item, index) => {
-            item.index = index + 1;
-          });
-          this.tableData = data;
+          if (res.data.retCode == 10000) {
+            const data = res.data.data.items;
+            this.total = res.data.data.total;
+            data.forEach((item, index) => {
+              item.index = index + 1 + (this.condition.pageIndex - 1) * 10;
+            });
+            this.tableData = data;
+          }
         });
     },
     getInfo(row) {

@@ -6,7 +6,7 @@
         华能玉环电厂运维眼系统
       </div>
       <div class="nav-btns">
-        <div class="name">admin</div>
+        <div class="name">{{username}}</div>
         <div class="change-password" @click="change">修改密码</div>
         <div class="out" @click="out">退出</div>
       </div>
@@ -15,19 +15,27 @@
   </div>
 </template>
 <script>
+import { removeCookie } from "@/utils/cookie";
+
 export default {
   name: "TopNav",
   data() {
     return {
+      username: "",
       url: require("../../../assets/images/logo.png"),
-      activeIndex: "1",
-      activeIndex2: "1"
+      activeIndex: "1"
     };
   },
+  created() {},
+  mounted() {
+    setTimeout(() => {
+      console.log(this.$store.state.app.user_info);
+
+      this.username = this.$store.state.app.user_info.user_name;
+    }, 1000);
+  },
   methods: {
-    handleSelect(key, keyPath) {
-      console.log(key, keyPath);
-    },
+    handleSelect(key, keyPath) {},
     out() {
       this.$confirm("确定退出吗?", "提示", {
         confirmButtonText: "确定",
@@ -35,6 +43,7 @@ export default {
         type: "warning"
       })
         .then(() => {
+          removeCookie("user_info");
           this.$router.push("/login");
         })
         .catch(() => {});
